@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -54,6 +55,11 @@ public class Payment {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    /** Optimistic-locking version, incremented on every change (including appended history). */
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     protected Payment() {
         // JPA
@@ -118,5 +124,22 @@ public class Payment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    /**
+     * Applies the outcome of an already-validated event. Only {@code PaymentLedger} calls this, after
+     * checking the transition with {@link PaymentTransitions}; the status never changes any other way.
+     * Touching {@code updatedAt} also makes informational events bump the optimistic-lock version.
+     */
+    void applyEvent(PaymentStatus newStatus, String newFailureReason, Instant at) {
+        this.status = newStatus;
+        if (newFailureReason != null) {
+            this.failureReason = newFailureReason;
+        }
+        this.updatedAt = at;
     }
 }

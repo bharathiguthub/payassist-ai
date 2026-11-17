@@ -29,6 +29,35 @@ class DatabaseIT {
     }
 
     @Test
+    void everySeedPaymentHasAGapFreeHistoryEndingInItsCurrentStatus() {
+        assertThat(jdbc.queryForObject("""
+                select count(*) from payments p
+                where not exists (select 1 from payment_events e where e.payment_id = p.id)""", Long.class))
+                .isZero();
+        // Fresh database: V2 ran before the seed, so no legacy snapshots exist.
+        assertThat(jdbc.queryForObject(
+                "select count(*) from payment_events where event_type = 'LEGACY_SNAPSHOT'", Long.class)).isZero();
+        // The latest status-changing event's target status equals the payment's status, for all 400.
+        assertThat(jdbc.queryForObject("""
+                select count(*) from payments p
+                join lateral (select e.to_status from payment_events e
+                              where e.payment_id = p.id and e.to_status is not null
+                              order by e.occurred_at desc, e.sequence_no desc limit 1) last on true
+                where last.to_status = p.status""", Long.class)).isEqualTo(400);
+        // Sequence numbers run 1..n per payment.
+        assertThat(jdbc.queryForObject("""
+                select count(*) from (select payment_id from payment_events group by payment_id
+                                      having min(sequence_no) <> 1 or max(sequence_no) <> count(*)) gaps""",
+                Long.class)).isZero();
+        // Every REFUNDED seed payment carries exactly its full amount as a recorded refund.
+        assertThat(jdbc.queryForObject("""
+                select count(*) from payments p where p.status = 'REFUNDED'
+                and p.amount <> (select sum(e.amount) from payment_events e
+                                 where e.payment_id = p.id and e.event_type = 'REFUND_RECORDED')""", Long.class))
+                .isZero();
+    }
+
+    @Test
     void pgvectorExtensionIsAvailableForTheRagPhaseButNotYetInstalled() {
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_available_extensions where name = 'vector'", Long.class)).isEqualTo(1);

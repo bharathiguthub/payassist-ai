@@ -37,6 +37,8 @@ docker compose up -d --force-recreate --wait keycloak   # re-import realm after 
 
 Surefire runs `*Test.java`; Failsafe runs `*IT.java`. Integration tests use `@IntegrationTest`
 (`backend/src/test/java/com/payassist/support/`), which starts `pgvector/pgvector:0.8.7-pg17`.
+Tests that **commit** writes use `@MutatingIntegrationTest` instead (separate context and container), so
+read-only ITs can keep asserting exact seed counts; each mutating test picks payments no other test uses.
 
 ## Architecture essentials
 
@@ -69,6 +71,13 @@ New capabilities (refund, policy/RAG, assistant) go in new top-level modules.
 
 **Audit**: `PaymentQueryService.viewDetails` publishes `PaymentViewedEvent`; `audit` writes the row
 synchronously in the same read-write transaction (fail closed). Keep detail reads audited.
+
+**Payment lifecycle**: status changes only through `PaymentLedger` (public interface; impl
+`payment/internal/PaymentLedgerService`), which row-locks the payment, validates against
+`PaymentTransitions` and appends to `payment_events` (append-only, enforced by a DB trigger; corrections
+are new events). Business-rule failures throw `DomainException.Conflict` (409) / `.RuleViolation` (422)
+with a stable `code` in Problem Details. Money: `BigDecimal` + ISO code via `MonetaryAmounts`, never rounded.
+Compare users by `Actor.subject` (OIDC `sub`), never by username.
 
 **Data**: Flyway owns the schema (`ddl-auto=validate`). Add schema changes as new `db/migration/V<n>__*.sql`.
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`

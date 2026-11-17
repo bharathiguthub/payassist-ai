@@ -8,8 +8,11 @@ export const PAYMENT_STATUSES = [
   'CAPTURED',
   'SETTLED',
   'FAILED',
+  'VOIDED',
+  'PARTIALLY_REFUNDED',
   'REFUNDED',
   'DISPUTED',
+  'CHARGED_BACK',
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 

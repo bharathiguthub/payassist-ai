@@ -7,8 +7,11 @@ const TONE: Record<PaymentStatus, string> = {
   CAPTURED: 'info',
   SETTLED: 'success',
   FAILED: 'danger',
+  VOIDED: 'neutral',
+  PARTIALLY_REFUNDED: 'warning',
   REFUNDED: 'warning',
   DISPUTED: 'danger',
+  CHARGED_BACK: 'danger',
 };
 
 export function StatusBadge({ status }: { status: PaymentStatus }) {
