@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -45,6 +46,7 @@ class CurrentActorTest {
         assertThatThrownBy(CurrentActor::require).isInstanceOf(AuthenticationCredentialsNotFoundException.class);
     }
 
+    /** Regression: a reserved "system:" username used to surface as HTTP 500; it is now a 403. */
     @Test
     void usersCannotImpersonateSystemActors() {
         var user = new DefaultOidcUser(AuthorityUtils.NO_AUTHORITIES, new OidcIdToken("t", Instant.EPOCH,
@@ -52,6 +54,7 @@ class CurrentActorTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new OAuth2AuthenticationToken(user, AuthorityUtils.NO_AUTHORITIES, "keycloak"));
 
-        assertThatThrownBy(CurrentActor::require).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(CurrentActor::require).isInstanceOf(AccessDeniedException.class)
+                .hasMessage("This account cannot perform audited actions");
     }
 }

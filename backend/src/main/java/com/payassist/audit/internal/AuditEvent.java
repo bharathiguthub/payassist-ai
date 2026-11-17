@@ -7,6 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** Append-only record of who accessed which sensitive resource and when (a DB trigger blocks changes). */
 @Entity
@@ -38,17 +43,22 @@ public class AuditEvent {
     @Column(name = "correlation_id", length = 64)
     private String correlationId;
 
+    /** Non-sensitive structured context (decision, codes, versions). Stored as JSONB. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "details", columnDefinition = "jsonb")
+    private Map<String, String> details;
+
     protected AuditEvent() {
         // JPA
     }
 
     public AuditEvent(Instant occurredAt, String actor, String action, String resourceType, String resourceId) {
-        this(occurredAt, actor, null, action, resourceType, resourceId, null);
+        this(occurredAt, actor, null, action, resourceType, resourceId, null, null);
     }
 
     @SuppressWarnings("java:S107") // flat audit record
     public AuditEvent(Instant occurredAt, String actor, String actorSubject, String action, String resourceType,
-            String resourceId, String correlationId) {
+            String resourceId, String correlationId, Map<String, String> details) {
         this.occurredAt = occurredAt;
         this.actor = actor;
         this.actorSubject = actorSubject;
@@ -56,6 +66,7 @@ public class AuditEvent {
         this.resourceType = resourceType;
         this.resourceId = resourceId;
         this.correlationId = correlationId;
+        this.details = details == null || details.isEmpty() ? null : new LinkedHashMap<>(details);
     }
 
     public Long getId() {
@@ -88,5 +99,9 @@ public class AuditEvent {
 
     public String getCorrelationId() {
         return correlationId;
+    }
+
+    public Map<String, String> getDetails() {
+        return details == null ? Map.of() : Collections.unmodifiableMap(details);
     }
 }

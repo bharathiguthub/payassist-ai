@@ -46,6 +46,32 @@ payassist:
       client-id: ${KEYCLOAK_CLIENT_ID:payassist-bff}
       client-secret: ${KEYCLOAK_CLIENT_SECRET}
 
+  # SYNTHETIC refund policy (not a real scheme or merchant policy). See RefundPolicy and ADR 0010.
+  # Change 'version' whenever any value below changes: every decision and audit record carries it.
+  refund:
+    policy:
+      version: SYNTHETIC-REFUND-POLICY-2026.11-v1
+      supported-currencies: [GBP, USD, EUR, INR]
+      methods:
+        CARD:
+          refunds-enabled: true
+          refund-window-days: 120
+          partial-refunds-allowed: true
+        WALLET:
+          refunds-enabled: true
+          refund-window-days: 90
+          partial-refunds-allowed: true
+        BANK_TRANSFER:
+          refunds-enabled: true
+          refund-window-days: 60
+          partial-refunds-allowed: false
+      # Largest refund a CARE_SUPERVISOR may approve; above this the refund needs escalation.
+      supervisor-approval-limits:
+        GBP: 1000.00
+        USD: 1250.00
+        EUR: 1150.00
+        INR: 100000.00
+
   # Synthetic thresholds for time-based investigation findings (see InvestigationProperties).
   investigation:
     pending-alert-after: 24h

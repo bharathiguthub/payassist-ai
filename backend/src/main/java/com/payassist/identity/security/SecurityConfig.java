@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -79,6 +80,10 @@ class SecurityConfig {
                         // Any logged-in user may ask "who am I" so the UI can explain missing roles.
                         .requestMatchers("/api/v1/me").authenticated()
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)
+                        // Explicit even though /api/** below would match: refund endpoints get narrower
+                        // rules in milestone 4, and each must be listed deliberately.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/refunds/eligibility-check")
+                                .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
                         .requestMatchers("/api/**").hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2

@@ -28,4 +28,9 @@ public interface PaymentEventRepository extends Repository<PaymentEvent, UUID> {
 
     Optional<PaymentEvent> findFirstByPaymentIdAndEventTypeOrderBySequenceNoDesc(UUID paymentId,
             PaymentEventType eventType);
+
+    Optional<PaymentEvent> findFirstByPaymentIdAndEventTypeOrderByOccurredAtAscSequenceNoAsc(UUID paymentId,
+            PaymentEventType eventType);
+
+    long countByPaymentIdAndEventType(UUID paymentId, PaymentEventType eventType);
 }

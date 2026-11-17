@@ -23,6 +23,7 @@ Three personas: care executive, supervisor, platform administrator.
 | Payment statistics | | ✔ | ✔ |
 | Audit log | | | ✔ |
 | Payment timeline / investigation summary (Phase 2) | ✔ | ✔ | ✔ (explicit, read-only) |
+| Refund eligibility check (Phase 2, advisory, read-only) | ✔ | ✔ | ✔ (explicit, read-only) |
 
 ## Consequences
 - Mapped roles live on the `Authentication`, not on the `OidcUser` principal. Code must read

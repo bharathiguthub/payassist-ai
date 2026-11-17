@@ -29,6 +29,12 @@ public final class Roles {
      */
     public static final String INVESTIGATE_PAYMENTS = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
 
+    /**
+     * Advisory refund eligibility check (read-only; creates nothing). ADMIN is granted this explicitly as
+     * read-only oversight; requesting or approving refunds will be separate, narrower permissions.
+     */
+    public static final String CHECK_REFUND_ELIGIBILITY = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
+
     private Roles() {
     }
 }

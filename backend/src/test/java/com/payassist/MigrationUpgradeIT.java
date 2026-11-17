@@ -69,8 +69,8 @@ class MigrationUpgradeIT {
                 .containsEntry("actor", "agent.alice").containsEntry("action", "VIEW")
                 .containsEntry("actor_subject", null).containsEntry("correlation_id", null);
         assertThat(jdbc.queryForObject(
-                "select count(*) from flyway_schema_history where version in ('2', '3') and success", Long.class))
-                .isEqualTo(2);
+                "select count(*) from flyway_schema_history where version in ('2', '3', '4') and success", Long.class))
+                .isEqualTo(3);
 
         // Re-running is a no-op (repeatable seed is idempotent; nothing pending).
         long events = jdbc.queryForObject("select count(*) from payment_events", Long.class);

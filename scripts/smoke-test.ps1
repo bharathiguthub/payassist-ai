@@ -50,6 +50,18 @@ function Send($session, [string]$method, [string]$url, $form = $null, $headers =
     return $response
 }
 
+# JSON POST to the API, echoing the session's XSRF-TOKEN cookie in the X-XSRF-TOKEN header (as the SPA does).
+function PostJson($session, [string]$path, [string]$json, [bool]$withCsrf = $true) {
+    $request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$BaseUrl$path")
+    $request.Content = [System.Net.Http.StringContent]::new($json, [System.Text.Encoding]::UTF8, 'application/json')
+    [void]$request.Headers.TryAddWithoutValidation('Accept', 'application/json')
+    if ($withCsrf) {
+        $token = ($session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value
+        [void]$request.Headers.TryAddWithoutValidation('X-XSRF-TOKEN', $token)
+    }
+    return $session.Client.SendAsync($request).GetAwaiter().GetResult()
+}
+
 # Browsers treat http://localhost as a secure context and send 'Secure' cookies to it (Keycloak's
 # login cookies are Secure; SameSite=None). .NET does not, so mirror browser behaviour for localhost only.
 function Copy-LocalhostSecureCookies($session, $response) {
@@ -139,7 +151,17 @@ Check 'user without role can call /me' ((Status $nora.Session '/api/v1/me') -eq 
 Check 'user without role is denied payments (403)' ((Status $nora.Session '/api/v1/payments') -eq 403)
 Check 'user without role is denied the timeline (403)' ((Status $nora.Session '/api/v1/payments/PAY-000042/timeline') -eq 403)
 
-Write-Host "`n[6] CSRF and logout (agent.alice)"
+Write-Host "`n[6] Refund eligibility (read-only check)"
+$eligibilityBody = '{"paymentRef":"PAY-000042"}'
+Check 'eligibility check without CSRF token is rejected (403)' ([int](PostJson $alice.Session '/api/v1/refunds/eligibility-check' $eligibilityBody $false).StatusCode -eq 403)
+$eligibility = PostJson $alice.Session '/api/v1/refunds/eligibility-check' $eligibilityBody
+$eligibilityJson = $eligibility.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+Check 'agent gets an eligibility decision with policy version' ([int]$eligibility.StatusCode -eq 200 -and $eligibilityJson -match '"decision":"(ELIGIBLE|INELIGIBLE|MANUAL_REVIEW)"' -and $eligibilityJson -match '"policyVersion":"[^"]+"')
+Check 'user without role is denied eligibility checks (403)' ([int](PostJson $nora.Session '/api/v1/refunds/eligibility-check' $eligibilityBody).StatusCode -eq 403)
+$audit = (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events?size=5").Content.ReadAsStringAsync().GetAwaiter().GetResult()
+Check 'eligibility check recorded in the audit log' ($audit -match 'REFUND_ELIGIBILITY_CHECK')
+
+Write-Host "`n[7] CSRF and logout (agent.alice)"
 $csrf = ($alice.Session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value
 Check 'XSRF-TOKEN cookie present' ([bool]$csrf)
 Check 'logout without CSRF token is rejected (403)' ([int](Send $alice.Session 'POST' "$BaseUrl/logout").StatusCode -eq 403)

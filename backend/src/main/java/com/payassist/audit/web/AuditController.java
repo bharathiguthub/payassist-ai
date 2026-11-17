@@ -7,6 +7,7 @@ import com.payassist.shared.web.PageResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.Instant;
+import java.util.Map;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,10 +40,10 @@ class AuditController {
 
     private static AuditEventResponse toResponse(AuditEvent e) {
         return new AuditEventResponse(e.getId(), e.getOccurredAt(), e.getActor(), e.getAction(),
-                e.getResourceType(), e.getResourceId(), e.getCorrelationId());
+                e.getResourceType(), e.getResourceId(), e.getCorrelationId(), e.getDetails());
     }
 
     record AuditEventResponse(Long id, Instant occurredAt, String actor, String action, String resourceType,
-            String resourceId, String correlationId) {
+            String resourceId, String correlationId, Map<String, String> details) {
     }
 }

@@ -42,7 +42,7 @@ Decision rationale lives in the ADRs in [`docs/adr/`](adr/).
 | Domain API | Spring Boot modular monolith, `/api/v1`, Problem Details errors | **1** |
 | Data | PostgreSQL 17, Flyway, pgvector image | **1** (vector usage later) |
 | Audit | Append-only `audit_events`, event-driven | **1** |
-| Refund eligibility | Rules engine module in the monolith | 2 |
+| Refund eligibility | Deterministic, versioned rules engine (`refund` module) | **2 (done)** |
 | Policy search (RAG) | Spring AI, embeddings in pgvector | 3 |
 | AI agents | Python LangGraph service; PayAssist tools exposed via MCP | 4 |
 | Caching / shared sessions | Redis (Spring Session) | 4+ |
@@ -112,6 +112,8 @@ com.payassist
 ├── payment    PaymentStatus, PaymentMethod, PaymentViewedEvent, PaymentLedger (write), PaymentHistory (read)
 │              (public API) · internal/ (entities, state machine, ledger, history, queries) · web/
 ├── investigation  InvestigationService, InvestigationSummary (public API; future AI tool seam) · internal/ (rules) · web/
+├── refund     RefundEligibilityService, RefundEligibility (public API; future AI tool seam) · internal/ (policy,
+│              rules engine, reservations port) · web/
 ├── audit      internal/ (entity, listeners for PaymentViewedEvent and AuditRecord) · web/ (admin audit API)
 └── shared     OPEN module: Actor, AuditRecord, DomainException, MonetaryAmounts, Problem Details handler,
                PageResponse, correlation IDs, Clock
@@ -120,7 +122,7 @@ com.payassist
 Rules (checked by `ModularityTest` using Spring Modulith):
 
 - Only a module's top-level package is visible to other modules; sub-packages are private.
-- No dependency cycles. Current graph: `investigation → payment → customer`, `audit → payment` (event type only), all → `identity`, `shared`.
+- No dependency cycles. Current graph: `investigation → payment → customer`, `refund → payment`, `audit → payment` (event type only), all → `identity`, `shared`.
 - No JPA relationships across modules (payments reference customers by ID).
 - Modules talk through public services (`CustomerDirectory`) or domain events (`PaymentViewedEvent`).
 
@@ -143,7 +145,7 @@ Rules (checked by `ModularityTest` using Spring Modulith):
 |---|---|---|
 | `customers` | Synthetic customers | `customer_ref` unique; email always masked in API responses |
 | `payments` | Synthetic payments | Status/method enforced with CHECK constraints; **no PAN, CVV or bank account data** |
-| `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the read it audits; actor subject + correlation ID since V3 |
+| `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the operation it audits; actor subject + correlation ID since V3; non-sensitive JSONB `details` since V4 |
 | `payment_events` | Payment history (Phase 2) | Append-only (DB trigger); written only by `PaymentLedger` together with the status change; see [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md) |
 
 Migrations: `backend/src/main/resources/db/migration` (all environments).
@@ -158,7 +160,8 @@ migration loaded **only** by the `dev` profile and tests.
 |---|---|---|
 | M1 Payment lifecycle + event history | Done | [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md), [guide](learning/phase2-m1-payment-lifecycle.md) |
 | M2 Timeline + investigation summary | Done | [ADR 0009](adr/0009-deterministic-investigation-summary.md), [guide](learning/phase2-m2-investigation.md), [API](api.md) |
-| M3–M8 Eligibility, refunds, disputes, audit, frontend, docs | Planned | |
+| M3 Refund eligibility engine | Done | [ADR 0010](adr/0010-refund-eligibility-engine.md), [guide](learning/phase2-m3-refund-eligibility.md), [API](api.md) |
+| M4–M8 Refund requests/approval, disputes, audit, frontend, docs | Planned | |
 
 ## 7. Security controls (Phase 1)
 

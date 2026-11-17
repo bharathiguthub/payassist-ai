@@ -63,7 +63,7 @@ and `@PreAuthorize(Roles.*)` on controller methods. Mapped roles live on the `Au
 on the `OidcUser` principal, so read authorities from `Authentication`. Note that
 `oidcLogin().authorities(...)` in tests sets both and hides this mistake.
 
-**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `investigation`, `audit`, `shared` (OPEN).
+**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `investigation`, `refund`, `audit`, `shared` (OPEN).
 `ModularityTest` (Spring Modulith) fails the build if a module touches another module's sub-packages
 (`internal`, `web`, `security`) or creates a cycle. Cross-module access goes through top-level-package
 types (e.g. `CustomerDirectory`, `PaymentViewedEvent`). Entities hold IDs, not JPA relations, across modules.
@@ -81,6 +81,12 @@ reads audited. Investigation reads (`Roles.INVESTIGATE_PAYMENTS`, ADMIN read-onl
 are new events). Business-rule failures throw `DomainException.Conflict` (409) / `.RuleViolation` (422)
 with a stable `code` in Problem Details. Money: `BigDecimal` + ISO code via `MonetaryAmounts`, never rounded.
 Compare users by `Actor.subject` (OIDC `sub`), never by username.
+
+**Refund eligibility** (`refund` module, ADR 0010): `RefundEligibilityService` → pure `RefundEligibilityEngine` →
+ordered `EligibilityRules`. Don't duplicate rules owned by `payment`: status refundability comes from
+`PaymentHistory.refundPosition` (state machine), refund totals from the ledger's query. Policy is validated config
+`payassist.refund.policy` with a `version`: bump it whenever a value changes. Eligibility is advisory; refund
+request creation (M4) must re-run the engine under the payment row lock.
 
 **Data**: Flyway owns the schema (`ddl-auto=validate`). Add schema changes as new `db/migration/V<n>__*.sql`.
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`
@@ -100,3 +106,7 @@ deliberately deferred to the RAG phase.
   `smoke-test.ps1` copies them for localhost only.
 - `frontend/.npmrc` has `legacy-peer-deps=true` to avoid an npm 11.3 crash (`reading 'edgesOut'`).
 - Spring redirects unauthenticated *non-API* requests to login only when `Accept: text/html`; otherwise 401.
+- Never use `SecurityMockMvcRequestPostProcessors.csrf()` in `*IT` classes: it swaps the CSRF repository of the
+  shared cached context and later tests lose the `XSRF-TOKEN` cookie. Use `support/RealCsrf.token(mvc)`.
+- Integration tests run with a fixed clock (`FixedClockTestConfig`, 2026-11-16T12:00Z) because seed dates are
+  absolute and refund windows/investigation thresholds are time-based.

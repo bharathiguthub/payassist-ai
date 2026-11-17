@@ -1,6 +1,9 @@
 package com.payassist.identity;
 
 import com.payassist.shared.Actor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
@@ -34,10 +37,21 @@ public final class CurrentActor {
      * both, which only happens in tests.
      */
     public static Actor from(Authentication authentication) {
-        if (authentication.getPrincipal() instanceof OidcUser oidc) {
-            String username = oidc.getPreferredUsername() != null ? oidc.getPreferredUsername() : authentication.getName();
-            return Actor.user(oidc.getSubject(), username);
+        try {
+            if (authentication.getPrincipal() instanceof OidcUser oidc) {
+                String username = oidc.getPreferredUsername() != null ? oidc.getPreferredUsername()
+                        : authentication.getName();
+                return Actor.user(oidc.getSubject(), username);
+            }
+            return Actor.user(authentication.getName(), authentication.getName());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // E.g. a username using the reserved "system:" prefix, or an over-long or missing identity.
+            // Such an identity cannot be recorded unambiguously in history or audit, so the request is
+            // refused (HTTP 403) instead of failing with a server error. The value is not logged or echoed.
+            LOG.warn("Refusing request: authenticated identity cannot be used as an actor ({})", e.getMessage());
+            throw new AccessDeniedException("This account cannot perform audited actions");
         }
-        return Actor.user(authentication.getName(), authentication.getName());
     }
+
+    private static final Logger LOG = LoggerFactory.getLogger(CurrentActor.class);
 }

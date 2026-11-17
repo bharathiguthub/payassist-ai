@@ -17,7 +17,8 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | Time | ISO-8601 UTC instants (`2026-05-18T00:53:00Z`). |
 | Errors | RFC 9457 Problem Details (`application/problem+json`). Business-rule errors add a stable `code` property. |
 | Correlation | Every response carries `X-Correlation-Id`; a client may send its own (8–64 chars `[A-Za-z0-9-]`). It is stored on audit records and payment events. |
-| Auditing | Every read of a single payment's details, timeline or summary writes an `audit_events` row in the same transaction (if auditing fails, the read fails). |
+| Auditing | Every read of a single payment's details, timeline or summary, and every eligibility check, writes an `audit_events` row in the same transaction (if auditing fails, the request fails). |
+| Identity | Accounts whose username uses the reserved `system:` prefix are refused with 403 on audited operations. |
 
 ### Error codes
 
@@ -29,7 +30,7 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | 404 | — | Resource not found |
 | 409 | `INVALID_STATE_TRANSITION` | The payment's lifecycle does not allow the action in its current status |
 | 409 | `CONCURRENT_MODIFICATION` | Another request changed the resource first; reload and retry |
-| 422 | e.g. `CURRENCY_MISMATCH`, `INVALID_AMOUNT_SCALE`, `REFUND_EXCEEDS_PAYMENT_AMOUNT` | Business rule violated |
+| 422 | e.g. `INVALID_AMOUNT_SCALE`, `UNSUPPORTED_CURRENCY`, `INVALID_AMOUNT`, `CURRENCY_REQUIRED`, `REFUND_EXCEEDS_PAYMENT_AMOUNT` | Business rule violated (malformed money is rejected, never rounded) |
 
 ## Access matrix
 
@@ -40,6 +41,7 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | `GET /payments/{ref}` | ✔ | ✔ | ✔ | 403 |
 | `GET /payments/{ref}/timeline` | ✔ | ✔ | ✔ read-only | 403 |
 | `GET /payments/{ref}/investigation-summary` | ✔ | ✔ | ✔ read-only | 403 |
+| `POST /refunds/eligibility-check` | ✔ | ✔ | ✔ read-only | 403 |
 | `GET /payments/stats` | 403 | ✔ | ✔ | 403 |
 | `GET /admin/audit-events` | 403 | 403 | ✔ | 403 |
 
@@ -53,7 +55,8 @@ Enforced twice: URL rules in `SecurityConfig` and `@PreAuthorize` on controllers
 - `GET /payments?q=&status=&page=&size=` — search by payment/customer reference prefix and status; paged.
 - `GET /payments/{paymentRef}` — details with masked customer email. Audited as `VIEW`.
 - `GET /payments/stats` — counts per status.
-- `GET /admin/audit-events?page=&size=` — audit trail, newest first. Phase 2 adds `correlationId` to each item.
+- `GET /admin/audit-events?page=&size=` — audit trail, newest first. Phase 2 adds `correlationId` and a
+  `details` object (non-sensitive codes, amounts and versions; e.g. eligibility decision and `policyVersion`).
 
 ## Phase 2 endpoints
 
@@ -155,3 +158,63 @@ Deterministic summary computed from the same recorded data. Audited as `VIEW_INV
 
 The thresholds are synthetic configuration, not card-scheme rules. `possibleNextEvents` lists the lifecycle
 events the state machine allows from the current status and payment method.
+
+### `POST /refunds/eligibility-check`
+
+Advisory, **read-only** refund eligibility decision from the deterministic rules engine
+([ADR 0010](adr/0010-refund-eligibility-engine.md)). Nothing is created, reserved or executed. CSRF token required
+(POST). Audited as `REFUND_ELIGIBILITY_CHECK` with details `decision`, `reasonCodes`, `requestedAmount`, `currency`,
+`remainingRefundableAmount`, `policyVersion`, `paymentVersion`.
+
+Request:
+
+```json
+{ "paymentRef": "PAY-000072", "amount": "25.50", "currency": "GBP" }
+```
+
+| Field | Rules |
+|---|---|
+| `paymentRef` | required, `^[A-Za-z0-9-]{1,32}$` |
+| `amount` | optional; JSON number or decimal string. Omit to evaluate the full remaining refundable amount. More decimals than the currency allows → 422 `INVALID_AMOUNT_SCALE` (never rounded). |
+| `currency` | ISO 4217 (`^[A-Z]{3}$`); required with `amount`. Unknown, or more than 2 minor units → 422 `UNSUPPORTED_CURRENCY`. |
+
+Response (abridged):
+
+```json
+{
+  "schemaVersion": "1.0",
+  "decision": "MANUAL_REVIEW",
+  "paymentRef": "PAY-000024",
+  "requestedAmount": 1830.43, "currency": "GBP",
+  "paymentStatus": "SETTLED", "paymentMethod": "CARD",
+  "paymentAmount": 1830.43, "paymentCurrency": "GBP",
+  "previouslyRefundedAmount": 0.00, "reservedPendingAmount": 0.00, "remainingRefundableAmount": 1830.43,
+  "refundWindow": { "basis": "CAPTURED_AT", "startsAt": "...", "endsAt": "...", "days": 120, "open": true },
+  "reasons": [ { "code": "SUPERVISOR_LIMIT_EXCEEDED", "outcome": "MANUAL_REVIEW",
+                 "message": "Requested 1830.43 GBP exceeds the supervisor approval limit of 1000.00 GBP; ..." } ],
+  "checks": [ { "rule": "PAYMENT_STATUS", "outcome": "PASS", "code": null, "message": "Status SETTLED allows refunds." } ],
+  "policyVersion": "SYNTHETIC-REFUND-POLICY-2026.11-v1",
+  "evaluatedAt": "2026-11-16T12:00:00Z",
+  "paymentVersion": 0,
+  "correlationId": "b0d6...",
+  "advisory": "Advisory check only: no refund was created, reserved or executed. Eligibility is re-validated when a refund request is submitted."
+}
+```
+
+(`checks` contains one entry per rule; abridged above.)
+
+**Decision** = most severe rule outcome: any `INELIGIBLE` → `INELIGIBLE`; else any `MANUAL_REVIEW` → `MANUAL_REVIEW`;
+else `ELIGIBLE` (reason `WITHIN_POLICY`). Rules after a failed status check report `NOT_EVALUATED`.
+
+| Rule | Reason codes |
+|---|---|
+| `PAYMENT_STATUS` (from the payment state machine) | `PAYMENT_NOT_CAPTURED`, `PAYMENT_FAILED`, `PAYMENT_VOIDED`, `PAYMENT_FULLY_REFUNDED`, `PAYMENT_DISPUTED`, `PAYMENT_CHARGED_BACK` → INELIGIBLE |
+| `CURRENCY` | `CURRENCY_MISMATCH`, `CURRENCY_NOT_SUPPORTED` → INELIGIBLE |
+| `PAYMENT_METHOD` | `PAYMENT_METHOD_NOT_SUPPORTED`, `PARTIAL_REFUND_NOT_ALLOWED_FOR_METHOD` (bank transfers: full refunds only) → INELIGIBLE |
+| `REFUND_WINDOW` (from first capture; card 120 d, wallet 90 d, bank transfer 60 d) | `REFUND_WINDOW_EXPIRED` → INELIGIBLE |
+| `REFUNDABLE_AMOUNT` (amount − refunded − pending) | `NOTHING_LEFT_TO_REFUND`, `AMOUNT_EXCEEDS_REFUNDABLE` → INELIGIBLE |
+| `PENDING_REFUNDS` | `PENDING_REFUND_IN_PROGRESS` → MANUAL_REVIEW |
+| `APPROVAL_LIMIT` (GBP 1000, USD 1250, EUR 1150, INR 100000) | `SUPERVISOR_LIMIT_EXCEEDED`, `APPROVAL_LIMIT_NOT_CONFIGURED` → MANUAL_REVIEW |
+
+All values are the **synthetic** policy in `application.yml` (`payassist.refund.policy`). Reason codes are stable;
+the decision is re-validated atomically when a refund request is created (milestone 4).

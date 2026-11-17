@@ -9,12 +9,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
-/** Full application context + real PostgreSQL (Testcontainers) + MockMvc. Requires Docker. */
+/** Full application context + real PostgreSQL (Testcontainers) + MockMvc + fixed clock. Requires Docker. */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(PostgresTestcontainersConfig.class)
+@Import({PostgresTestcontainersConfig.class, FixedClockTestConfig.class})
 public @interface IntegrationTest {
 }

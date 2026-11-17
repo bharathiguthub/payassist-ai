@@ -86,6 +86,8 @@ export interface ProblemDetail {
   title?: string;
   status?: number;
   detail?: string;
+  /** Stable business-rule code (e.g. INVALID_AMOUNT_SCALE), present on 409/422 responses. */
+  code?: string;
 }
 
 // --- Phase 2: payment timeline and investigation summary -------------------------------------
@@ -198,4 +200,52 @@ export interface InvestigationSummary {
   history: { eventCount: number; complete: boolean; recordedFrom: string | null };
   findings: Finding[];
   possibleNextEvents: PaymentEventType[];
+}
+
+// --- Phase 2: refund eligibility ------------------------------------------------------------------
+
+export type EligibilityDecision = 'ELIGIBLE' | 'MANUAL_REVIEW' | 'INELIGIBLE';
+export type EligibilityOutcome = 'PASS' | 'MANUAL_REVIEW' | 'INELIGIBLE' | 'NOT_EVALUATED';
+
+export interface EligibilityReason {
+  code: string;
+  outcome: EligibilityOutcome;
+  message: string;
+}
+
+export interface EligibilityCheck {
+  rule: string;
+  outcome: EligibilityOutcome;
+  code: string | null;
+  message: string;
+}
+
+export interface RefundEligibility {
+  schemaVersion: string;
+  decision: EligibilityDecision;
+  paymentRef: string;
+  requestedAmount: number;
+  currency: string;
+  paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
+  paymentAmount: number;
+  paymentCurrency: string;
+  previouslyRefundedAmount: number;
+  reservedPendingAmount: number;
+  remainingRefundableAmount: number;
+  refundWindow: { basis: string; startsAt: string; endsAt: string; days: number; open: boolean };
+  reasons: EligibilityReason[];
+  checks: EligibilityCheck[];
+  policyVersion: string;
+  evaluatedAt: string;
+  paymentVersion: number;
+  correlationId: string | null;
+  advisory: string;
+}
+
+/** Request body. The amount is a decimal string so no binary floating point ever touches money. */
+export interface EligibilityCheckRequest {
+  paymentRef: string;
+  amount?: string;
+  currency?: string;
 }
