@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { ApiError, apiFetch } from '../api/client';
 import type { PaymentDetails } from '../api/types';
+import { InvestigationSummaryCard } from '../components/InvestigationSummaryCard';
+import { PaymentTimeline } from '../components/PaymentTimeline';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatAmount, formatDateTime, humanize } from '../format';
 
@@ -65,9 +67,15 @@ export function PaymentDetailPage() {
               </dl>
             </div>
           )}
-          <p className="muted small">This view has been recorded in the audit log.</p>
         </div>
       )}
+      {data && (
+        <div className="grid section-gap">
+          <InvestigationSummaryCard paymentRef={data.paymentRef} />
+          <PaymentTimeline paymentRef={data.paymentRef} />
+        </div>
+      )}
+      {data && <p className="muted small">This view has been recorded in the audit log.</p>}
     </section>
   );
 }

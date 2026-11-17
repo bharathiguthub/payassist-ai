@@ -7,6 +7,8 @@ with AI agents.
 > **Current status: Phase 1.** Secure login, role-based access, and a customer care dashboard
 > for payment investigation over **synthetic data only**. No AI features yet.
 > See [docs/architecture.md](docs/architecture.md) and the decision records in [docs/adr/](docs/adr/).
+> **Phase 2 in progress** (branch `feature/phase2-payment-domain`): payment lifecycle, timeline and
+> investigation summary are done. API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
 
 | Layer | Technology |
 |---|---|

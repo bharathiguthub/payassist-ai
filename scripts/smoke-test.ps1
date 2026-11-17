@@ -14,7 +14,10 @@ param([string]$BaseUrl = 'http://localhost:3000')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$password = (Get-Content (Join-Path $root '.env') | Where-Object { $_ -match '^PAYASSIST_DEMO_PASSWORD=' }) -replace '^PAYASSIST_DEMO_PASSWORD=', ''
+# Parse like Docker Compose does: surrounding whitespace on the line is ignored.
+$password = (Get-Content (Join-Path $root '.env') | Where-Object { $_ -match '^\s*PAYASSIST_DEMO_PASSWORD=' } |
+    Select-Object -First 1) -replace '^\s*PAYASSIST_DEMO_PASSWORD=', ''
+if ($password) { $password = $password.Trim() }
 if (-not $password) { throw 'PAYASSIST_DEMO_PASSWORD not found in .env' }
 
 Add-Type -AssemblyName System.Net.Http
@@ -113,6 +116,8 @@ $me = (Send $alice.Session 'GET' "$BaseUrl/api/v1/me" $null @{ Accept = 'applica
 Check '/me returns CARE_AGENT and no tokens' ($me -match '"CARE_AGENT"' -and $me -notmatch 'eyJ')
 Check 'agent can search payments' ((Status $alice.Session '/api/v1/payments?q=PAY-0000') -eq 200)
 Check 'agent can open a payment' ((Status $alice.Session '/api/v1/payments/PAY-000042') -eq 200)
+Check 'agent can view the payment timeline' ((Status $alice.Session '/api/v1/payments/PAY-000042/timeline') -eq 200)
+Check 'agent can view the investigation summary' ((Status $alice.Session '/api/v1/payments/PAY-000042/investigation-summary') -eq 200)
 Check 'agent cannot see supervisor stats (403)' ((Status $alice.Session '/api/v1/payments/stats') -eq 403)
 Check 'agent cannot see audit log (403)' ((Status $alice.Session '/api/v1/admin/audit-events') -eq 403)
 
@@ -124,6 +129,7 @@ Check 'supervisor cannot see audit log (403)' ((Status $sam.Session '/api/v1/adm
 Write-Host "`n[4] Login as ada.admin (ADMIN)"
 $ada = Login 'ada.admin'
 Check 'admin can see stats' ((Status $ada.Session '/api/v1/payments/stats') -eq 200)
+Check 'admin has read-only investigation access' ((Status $ada.Session '/api/v1/payments/PAY-000042/investigation-summary') -eq 200)
 $audit = (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events" $null @{ Accept = 'application/json' }).Content.ReadAsStringAsync().GetAwaiter().GetResult()
 Check 'audit log recorded agent.alice viewing PAY-000042' ($audit -match 'agent\.alice' -and $audit -match 'PAY-000042')
 
@@ -131,6 +137,7 @@ Write-Host "`n[5] Login as nora.norole (no PayAssist role)"
 $nora = Login 'nora.norole'
 Check 'user without role can call /me' ((Status $nora.Session '/api/v1/me') -eq 200)
 Check 'user without role is denied payments (403)' ((Status $nora.Session '/api/v1/payments') -eq 403)
+Check 'user without role is denied the timeline (403)' ((Status $nora.Session '/api/v1/payments/PAY-000042/timeline') -eq 403)
 
 Write-Host "`n[6] CSRF and logout (agent.alice)"
 $csrf = ($alice.Session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value

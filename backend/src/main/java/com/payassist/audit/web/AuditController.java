@@ -39,10 +39,10 @@ class AuditController {
 
     private static AuditEventResponse toResponse(AuditEvent e) {
         return new AuditEventResponse(e.getId(), e.getOccurredAt(), e.getActor(), e.getAction(),
-                e.getResourceType(), e.getResourceId());
+                e.getResourceType(), e.getResourceId(), e.getCorrelationId());
     }
 
     record AuditEventResponse(Long id, Instant occurredAt, String actor, String action, String resourceType,
-            String resourceId) {
+            String resourceId, String correlationId) {
     }
 }

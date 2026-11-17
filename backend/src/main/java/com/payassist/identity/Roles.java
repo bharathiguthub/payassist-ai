@@ -23,6 +23,12 @@ public final class Roles {
     public static final String SUPERVISOR_OR_ADMIN = "hasAnyRole('CARE_SUPERVISOR','ADMIN')";
     public static final String ADMIN_ONLY = "hasRole('ADMIN')";
 
+    /**
+     * Read-only payment investigation (details, timeline, investigation summary). ADMIN is granted this
+     * explicitly, as read-only access for oversight; it confers no right to act on payments.
+     */
+    public static final String INVESTIGATE_PAYMENTS = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
+
     private Roles() {
     }
 }

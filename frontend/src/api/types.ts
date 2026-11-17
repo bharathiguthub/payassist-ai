@@ -87,3 +87,115 @@ export interface ProblemDetail {
   status?: number;
   detail?: string;
 }
+
+// --- Phase 2: payment timeline and investigation summary -------------------------------------
+
+export type PaymentEventType =
+  | 'LEGACY_SNAPSHOT'
+  | 'CREATED'
+  | 'AUTHORIZED'
+  | 'CAPTURED'
+  | 'SETTLED'
+  | 'FAILED'
+  | 'VOIDED'
+  | 'REFUND_RECORDED'
+  | 'DISPUTE_OPENED'
+  | 'DISPUTE_WON'
+  | 'DISPUTE_LOST'
+  | 'REFUND_REQUESTED'
+  | 'REFUND_REJECTED'
+  | 'REFUND_CANCELLED'
+  | 'REFUND_ESCALATED'
+  | 'DISPUTE_UPDATED';
+
+export type PaymentEventKind = 'LIFECYCLE' | 'INFORMATIONAL' | 'SYSTEM_ONLY';
+export type PaymentEventSource = 'PROCESSOR' | 'CARD_NETWORK' | 'PAYASSIST' | 'MIGRATION';
+
+export interface TimelineEntry {
+  sequenceNo: number;
+  eventType: PaymentEventType;
+  kind: PaymentEventKind;
+  description: string;
+  fromStatus: PaymentStatus | null;
+  toStatus: PaymentStatus | null;
+  amount: number | null;
+  currency: string | null;
+  reasonCode: string | null;
+  reasonDescription: string | null;
+  actor: string;
+  source: PaymentEventSource;
+  correlationId: string | null;
+  occurredAt: string;
+  recordedAt: string;
+  recordedOutOfOrder: boolean;
+}
+
+export interface PaymentTimeline {
+  paymentRef: string;
+  currentStatus: PaymentStatus;
+  currentStatusDescription: string;
+  amount: number;
+  currency: string;
+  eventCount: number;
+  events: TimelineEntry[];
+}
+
+export type FindingSeverity = 'WARNING' | 'INFO';
+
+export interface Finding {
+  code: string;
+  severity: FindingSeverity;
+  message: string;
+  evidence: number[];
+}
+
+export interface InvestigationSummary {
+  schemaVersion: string;
+  paymentRef: string;
+  generatedAt: string;
+  paymentVersion: number;
+  basis: string;
+  payment: {
+    amount: number;
+    currency: string;
+    status: PaymentStatus;
+    statusDescription: string;
+    terminal: boolean;
+    paymentMethod: PaymentMethod;
+    merchantName: string;
+    failureReason: string | null;
+    failureDescription: string | null;
+    createdAt: string;
+    lastUpdatedAt: string;
+    customer: CustomerSummary | null;
+  };
+  milestones: Record<
+    | 'createdAt'
+    | 'authorizedAt'
+    | 'capturedAt'
+    | 'settledAt'
+    | 'failedAt'
+    | 'voidedAt'
+    | 'lastRefundAt'
+    | 'disputeOpenedAt'
+    | 'disputeClosedAt',
+    string | null
+  >;
+  money: {
+    currency: string;
+    paymentAmount: number;
+    refundedAmount: number;
+    notRefundedAmount: number;
+    refundCount: number;
+  };
+  dispute: {
+    state: 'NONE' | 'OPEN' | 'WON' | 'LOST';
+    reasonCode: string | null;
+    reasonDescription: string | null;
+    openedAt: string | null;
+    closedAt: string | null;
+  };
+  history: { eventCount: number; complete: boolean; recordedFrom: string | null };
+  findings: Finding[];
+  possibleNextEvents: PaymentEventType[];
+}

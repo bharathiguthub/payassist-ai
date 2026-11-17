@@ -63,14 +63,17 @@ and `@PreAuthorize(Roles.*)` on controller methods. Mapped roles live on the `Au
 on the `OidcUser` principal, so read authorities from `Authentication`. Note that
 `oidcLogin().authorities(...)` in tests sets both and hides this mistake.
 
-**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `audit`, `shared` (OPEN).
+**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `investigation`, `audit`, `shared` (OPEN).
 `ModularityTest` (Spring Modulith) fails the build if a module touches another module's sub-packages
 (`internal`, `web`, `security`) or creates a cycle. Cross-module access goes through top-level-package
 types (e.g. `CustomerDirectory`, `PaymentViewedEvent`). Entities hold IDs, not JPA relations, across modules.
 New capabilities (refund, policy/RAG, assistant) go in new top-level modules.
 
-**Audit**: `PaymentQueryService.viewDetails` publishes `PaymentViewedEvent`; `audit` writes the row
-synchronously in the same read-write transaction (fail closed). Keep detail reads audited.
+**Audit**: `PaymentQueryService.viewDetails` publishes `PaymentViewedEvent`; newer code publishes the generic
+`shared.AuditRecord` (actor from `identity.CurrentActor`, never a parameter). `audit` writes the row
+synchronously in the same read-write transaction (fail closed); `audit_events` is append-only. Keep detail
+reads audited. Investigation reads (`Roles.INVESTIGATE_PAYMENTS`, ADMIN read-only) are checked on controller
+**and** service. API contract: `docs/api.md`; learning guides: `docs/learning/`.
 
 **Payment lifecycle**: status changes only through `PaymentLedger` (public interface; impl
 `payment/internal/PaymentLedgerService`), which row-locks the payment, validates against

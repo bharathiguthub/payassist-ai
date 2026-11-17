@@ -1,6 +1,8 @@
 package com.payassist.audit.internal;
 
 import com.payassist.payment.PaymentViewedEvent;
+import com.payassist.shared.web.CorrelationIdFilter;
+import org.slf4j.MDC;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +25,7 @@ class PaymentAccessAuditor {
 
     @EventListener
     void on(PaymentViewedEvent event) {
-        auditEvents.save(new AuditEvent(event.occurredAt(), event.actor(), ACTION_VIEW, RESOURCE_PAYMENT,
-                event.paymentRef()));
+        auditEvents.save(new AuditEvent(event.occurredAt(), event.actor(), null, ACTION_VIEW, RESOURCE_PAYMENT,
+                event.paymentRef(), MDC.get(CorrelationIdFilter.MDC_KEY)));
     }
 }

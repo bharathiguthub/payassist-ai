@@ -39,6 +39,8 @@ class MigrationUpgradeIT {
         List<Map<String, Object>> before = jdbc.queryForList(
                 "select payment_ref, amount, currency, status, failure_reason, updated_at from payments order by payment_ref");
         assertThat(before).hasSize(400);
+        jdbc.update("insert into audit_events (occurred_at, actor, action, resource_type, resource_id) "
+                + "values (now(), 'agent.alice', 'VIEW', 'PAYMENT', 'PAY-000042')");
 
         // 2. Upgrade with the same Flyway locations the dev profile uses.
         Flyway latest = Flyway.configure().dataSource(dataSource)
@@ -61,6 +63,14 @@ class MigrationUpgradeIT {
         assertThat(jdbc.queryForObject(
                 "select count(distinct payment_id) from payment_events where sequence_no > 1", Long.class))
                 .isEqualTo(400);
+
+        // Phase 1 audit rows survive V3; the new context columns are simply empty for them.
+        assertThat(jdbc.queryForMap("select actor, action, actor_subject, correlation_id from audit_events"))
+                .containsEntry("actor", "agent.alice").containsEntry("action", "VIEW")
+                .containsEntry("actor_subject", null).containsEntry("correlation_id", null);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from flyway_schema_history where version in ('2', '3') and success", Long.class))
+                .isEqualTo(2);
 
         // Re-running is a no-op (repeatable seed is idempotent; nothing pending).
         long events = jdbc.queryForObject("select count(*) from payment_events", Long.class);

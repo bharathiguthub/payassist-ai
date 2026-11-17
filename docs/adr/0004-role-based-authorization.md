@@ -22,6 +22,7 @@ Three personas: care executive, supervisor, platform administrator.
 | Search / view payments | ✔ | ✔ | ✔ |
 | Payment statistics | | ✔ | ✔ |
 | Audit log | | | ✔ |
+| Payment timeline / investigation summary (Phase 2) | ✔ | ✔ | ✔ (explicit, read-only) |
 
 ## Consequences
 - Mapped roles live on the `Authentication`, not on the `OidcUser` principal. Code must read

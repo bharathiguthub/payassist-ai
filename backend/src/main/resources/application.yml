@@ -46,6 +46,12 @@ payassist:
       client-id: ${KEYCLOAK_CLIENT_ID:payassist-bff}
       client-secret: ${KEYCLOAK_CLIENT_SECRET}
 
+  # Synthetic thresholds for time-based investigation findings (see InvestigationProperties).
+  investigation:
+    pending-alert-after: 24h
+    authorized-alert-after: 7d
+    settlement-delay-after: 3d
+
 management:
   endpoints:
     web:

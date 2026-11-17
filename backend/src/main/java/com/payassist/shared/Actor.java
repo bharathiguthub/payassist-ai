@@ -26,6 +26,10 @@ public record Actor(String subject, String username) {
         if (subject == null && !username.startsWith(SYSTEM_PREFIX)) {
             throw new IllegalArgumentException("a human actor needs a subject");
         }
+        if (subject != null && username.startsWith(SYSTEM_PREFIX)) {
+            // A user must never be able to appear as a system actor in history or audit records.
+            throw new IllegalArgumentException("a human actor cannot use the system: prefix");
+        }
     }
 
     public static Actor user(String subject, String username) {

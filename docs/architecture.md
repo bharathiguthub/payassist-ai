@@ -109,15 +109,18 @@ the SSO session → back to the SPA.
 com.payassist
 ├── identity   Roles (public API) · security/ (SecurityConfig, Keycloak client registration, role mapper) · web/ (/me)
 ├── customer   CustomerDirectory, CustomerSummary (public API) · internal/ (entity, repository, email masking)
-├── payment    PaymentStatus, PaymentMethod, PaymentViewedEvent (public API) · internal/ (entity, queries, service) · web/
-├── audit      internal/ (entity, PaymentViewedEvent listener) · web/ (admin audit API)
-└── shared     OPEN module: Problem Details handler, PageResponse, correlation IDs, Clock
+├── payment    PaymentStatus, PaymentMethod, PaymentViewedEvent, PaymentLedger (write), PaymentHistory (read)
+│              (public API) · internal/ (entities, state machine, ledger, history, queries) · web/
+├── investigation  InvestigationService, InvestigationSummary (public API; future AI tool seam) · internal/ (rules) · web/
+├── audit      internal/ (entity, listeners for PaymentViewedEvent and AuditRecord) · web/ (admin audit API)
+└── shared     OPEN module: Actor, AuditRecord, DomainException, MonetaryAmounts, Problem Details handler,
+               PageResponse, correlation IDs, Clock
 ```
 
 Rules (checked by `ModularityTest` using Spring Modulith):
 
 - Only a module's top-level package is visible to other modules; sub-packages are private.
-- No dependency cycles. Current graph: `payment → customer`, `audit → payment` (event type only), all → `identity`, `shared`.
+- No dependency cycles. Current graph: `investigation → payment → customer`, `audit → payment` (event type only), all → `identity`, `shared`.
 - No JPA relationships across modules (payments reference customers by ID).
 - Modules talk through public services (`CustomerDirectory`) or domain events (`PaymentViewedEvent`).
 
@@ -134,13 +137,14 @@ Rules (checked by `ModularityTest` using Spring Modulith):
 
 ---
 
-## 5. Data model (Phase 1)
+## 5. Data model (Phase 1 + Phase 2 so far)
 
 | Table | Purpose | Notes |
 |---|---|---|
 | `customers` | Synthetic customers | `customer_ref` unique; email always masked in API responses |
 | `payments` | Synthetic payments | Status/method enforced with CHECK constraints; **no PAN, CVV or bank account data** |
-| `audit_events` | Access audit trail | Append-only; written in the same transaction as the read it audits |
+| `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the read it audits; actor subject + correlation ID since V3 |
+| `payment_events` | Payment history (Phase 2) | Append-only (DB trigger); written only by `PaymentLedger` together with the status change; see [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md) |
 
 Migrations: `backend/src/main/resources/db/migration` (all environments).
 Seed data: `backend/src/main/resources/db/seed/R__synthetic_seed_data.sql`, a repeatable, idempotent
@@ -148,7 +152,15 @@ migration loaded **only** by the `dev` profile and tests.
 
 ---
 
-## 6. Security controls (Phase 1)
+## 6. Phase 2 progress
+
+| Milestone | Status | Docs |
+|---|---|---|
+| M1 Payment lifecycle + event history | Done | [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md), [guide](learning/phase2-m1-payment-lifecycle.md) |
+| M2 Timeline + investigation summary | Done | [ADR 0009](adr/0009-deterministic-investigation-summary.md), [guide](learning/phase2-m2-investigation.md), [API](api.md) |
+| M3–M8 Eligibility, refunds, disputes, audit, frontend, docs | Planned | |
+
+## 7. Security controls (Phase 1)
 
 | Threat | Control |
 |---|---|
@@ -167,7 +179,7 @@ migration loaded **only** by the `dev` profile and tests.
 
 ---
 
-## 7. Environments and configuration
+## 8. Environments and configuration
 
 | Setting | Local Docker | Local host-run | Production (future) |
 |---|---|---|---|
