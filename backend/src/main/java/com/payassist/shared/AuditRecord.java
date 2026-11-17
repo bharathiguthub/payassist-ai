@@ -26,7 +26,17 @@ public record AuditRecord(
         String resourceType,
         String resourceId,
         String correlationId,
-        Map<String, String> details) {
+        Map<String, String> details,
+        Outcome outcome) {
+
+    /** Result of the audited operation. */
+    public enum Outcome {
+        SUCCESS,
+        /** Refused by an authorization or separation-of-duties rule. */
+        DENIED,
+        /** Refused by a business rule (e.g. not eligible, invalid state). */
+        FAILED
+    }
 
     private static final Pattern DETAIL_KEY = Pattern.compile("^[a-z][A-Za-z0-9]{0,39}$");
     private static final int MAX_DETAIL_VALUE = 200;
@@ -38,6 +48,7 @@ public record AuditRecord(
         Objects.requireNonNull(action, "action");
         Objects.requireNonNull(resourceType, "resourceType");
         Objects.requireNonNull(resourceId, "resourceId");
+        outcome = outcome == null ? Outcome.SUCCESS : outcome;
         details = details == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(details));
         if (details.size() > MAX_DETAILS) {
             throw new IllegalArgumentException("too many audit details");
@@ -52,11 +63,16 @@ public record AuditRecord(
     /** An audit record for now, carrying the current request's correlation ID. */
     public static AuditRecord of(Clock clock, Actor actor, String action, String resourceType, String resourceId) {
         return new AuditRecord(Instant.now(clock), actor, action, resourceType, resourceId,
-                MDC.get(CorrelationIdFilter.MDC_KEY), Map.of());
+                MDC.get(CorrelationIdFilter.MDC_KEY), Map.of(), Outcome.SUCCESS);
     }
 
     /** The same record with non-sensitive structured details (insertion order is preserved). */
     public AuditRecord withDetails(Map<String, String> newDetails) {
-        return new AuditRecord(occurredAt, actor, action, resourceType, resourceId, correlationId, newDetails);
+        return new AuditRecord(occurredAt, actor, action, resourceType, resourceId, correlationId, newDetails, outcome);
+    }
+
+    /** The same record with a different outcome. */
+    public AuditRecord withOutcome(Outcome newOutcome) {
+        return new AuditRecord(occurredAt, actor, action, resourceType, resourceId, correlationId, details, newOutcome);
     }
 }

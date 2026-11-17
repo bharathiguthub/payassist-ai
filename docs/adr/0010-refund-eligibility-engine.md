@@ -28,7 +28,8 @@ every user and (later) for AI assistants, and must not contradict the rules that
   **advisory**; milestone 4 must re-run the engine atomically when creating a refund request (see below).
 - **Audit**: `REFUND_ELIGIBILITY_CHECK` with structured, non-sensitive `details` (decision, reason codes, amount,
   currency, remaining amount, policy version, payment version) in a new JSONB column (V4).
-- **Reserved amount**: `RefundReservations` port; returns zero until milestone 4 introduces pending requests.
+- **Reserved amount**: `RefundReservations` port; returned zero in M3. Since M4 the adapter sums pending refund
+  requests, and request creation follows the atomic re-validation below ([ADR 0011](0011-refund-requests-and-approval.md)).
 
 ## Refund escalation (decided by the product owner)
 Amounts above the supervisor limit stay pending with `ESCALATION_REQUIRED` (milestone 4). Supervisors cannot approve

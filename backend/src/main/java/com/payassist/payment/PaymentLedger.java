@@ -20,4 +20,12 @@ package com.payassist.payment;
 public interface PaymentLedger {
 
     RecordedPaymentEvent record(RecordPaymentEvent command);
+
+    /**
+     * Locks the payment row for the rest of the <em>caller's</em> transaction (one must be active) and returns
+     * the authoritative refund facts read under that lock. Every refund write path (request creation,
+     * approval, rejection) calls this first, so all of them are serialised per payment and lock rows in the
+     * same order (payment, then refund request), which rules out deadlocks between them.
+     */
+    PaymentHistory.RefundPosition lockForRefund(String paymentRef);
 }

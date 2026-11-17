@@ -20,6 +20,7 @@ class AuditRecordListener {
     @EventListener
     void on(AuditRecord record) {
         auditEvents.save(new AuditEvent(record.occurredAt(), record.actor().username(), record.actor().subject(),
-                record.action(), record.resourceType(), record.resourceId(), record.correlationId(), record.details()));
+                record.action(), record.resourceType(), record.resourceId(), record.correlationId(), record.details(),
+                record.outcome().name()));
     }
 }

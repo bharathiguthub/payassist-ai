@@ -44,6 +44,20 @@ describe('App authentication and role-based navigation', () => {
     expect(screen.getByRole('link', { name: 'Audit log' })).toBeInTheDocument();
   });
 
+  it('shows refund approvals to supervisors and admins only', async () => {
+    loggedInAs(['CARE_SUPERVISOR']);
+    renderWithProviders(<App />);
+    expect(await screen.findByRole('link', { name: 'Refund approvals' })).toHaveAttribute('href', '/refunds/approvals');
+  });
+
+  it('blocks a care agent who navigates directly to the approval queue', async () => {
+    loggedInAs(['CARE_AGENT']);
+    renderWithProviders(<App />, { route: '/refunds/approvals' });
+
+    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Refund approvals' })).not.toBeInTheDocument();
+  });
+
   it('blocks a care agent who navigates directly to an admin route', async () => {
     loggedInAs(['CARE_AGENT']);
     renderWithProviders(<App />, { route: '/admin/audit' });

@@ -44,6 +44,10 @@ public class AuditEvent {
     private String correlationId;
 
     /** Non-sensitive structured context (decision, codes, versions). Stored as JSONB. */
+    /** SUCCESS, DENIED or FAILED; NULL on Phase 1 rows, which were all successful reads. */
+    @Column(name = "outcome", length = 16)
+    private String outcome;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "details", columnDefinition = "jsonb")
     private Map<String, String> details;
@@ -53,12 +57,12 @@ public class AuditEvent {
     }
 
     public AuditEvent(Instant occurredAt, String actor, String action, String resourceType, String resourceId) {
-        this(occurredAt, actor, null, action, resourceType, resourceId, null, null);
+        this(occurredAt, actor, null, action, resourceType, resourceId, null, null, "SUCCESS");
     }
 
     @SuppressWarnings("java:S107") // flat audit record
     public AuditEvent(Instant occurredAt, String actor, String actorSubject, String action, String resourceType,
-            String resourceId, String correlationId, Map<String, String> details) {
+            String resourceId, String correlationId, Map<String, String> details, String outcome) {
         this.occurredAt = occurredAt;
         this.actor = actor;
         this.actorSubject = actorSubject;
@@ -67,6 +71,7 @@ public class AuditEvent {
         this.resourceId = resourceId;
         this.correlationId = correlationId;
         this.details = details == null || details.isEmpty() ? null : new LinkedHashMap<>(details);
+        this.outcome = outcome;
     }
 
     public Long getId() {
@@ -99,6 +104,10 @@ public class AuditEvent {
 
     public String getCorrelationId() {
         return correlationId;
+    }
+
+    public String getOutcome() {
+        return outcome == null ? "SUCCESS" : outcome;
     }
 
     public Map<String, String> getDetails() {

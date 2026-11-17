@@ -4,12 +4,17 @@ import { ApiError, apiFetch } from '../api/client';
 import type { PaymentDetails } from '../api/types';
 import { InvestigationSummaryCard } from '../components/InvestigationSummaryCard';
 import { PaymentTimeline } from '../components/PaymentTimeline';
+import { PaymentRefundRequests } from '../components/PaymentRefundRequests';
 import { RefundEligibilityPanel } from '../components/RefundEligibilityPanel';
+import { RefundRequestForm } from '../components/RefundRequestForm';
+import { hasAnyRole, useCurrentUser } from '../auth/auth';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatAmount, formatDateTime, humanize } from '../format';
 
 export function PaymentDetailPage() {
   const { paymentRef = '' } = useParams();
+  const { data: user } = useCurrentUser();
+  const canRequestRefunds = hasAnyRole(user, ['CARE_AGENT', 'CARE_SUPERVISOR']);
   const { data, isPending, error } = useQuery({
     queryKey: ['payment', paymentRef],
     queryFn: () => apiFetch<PaymentDetails>(`/api/v1/payments/${encodeURIComponent(paymentRef)}`),
@@ -74,6 +79,8 @@ export function PaymentDetailPage() {
         <div className="grid section-gap">
           <InvestigationSummaryCard paymentRef={data.paymentRef} />
           <RefundEligibilityPanel paymentRef={data.paymentRef} currency={data.currency} />
+          {canRequestRefunds && <RefundRequestForm paymentRef={data.paymentRef} currency={data.currency} />}
+          <PaymentRefundRequests paymentRef={data.paymentRef} />
           <PaymentTimeline paymentRef={data.paymentRef} />
         </div>
       )}

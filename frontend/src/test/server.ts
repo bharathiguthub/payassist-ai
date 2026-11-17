@@ -41,6 +41,9 @@ export const samplePayments: Page<PaymentListItem> = {
 export const server = setupServer(
   http.get('/api/v1/me', () => new HttpResponse(null, { status: 401 })),
   http.get('/api/v1/payments', () => HttpResponse.json(samplePayments)),
+  http.get('/api/v1/refunds', () =>
+    HttpResponse.json({ content: [], page: 0, size: 50, totalElements: 0, totalPages: 0 }),
+  ),
 );
 
 export function loggedInAs(roles: Role[]) {

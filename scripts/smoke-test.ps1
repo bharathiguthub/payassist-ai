@@ -51,10 +51,11 @@ function Send($session, [string]$method, [string]$url, $form = $null, $headers =
 }
 
 # JSON POST to the API, echoing the session's XSRF-TOKEN cookie in the X-XSRF-TOKEN header (as the SPA does).
-function PostJson($session, [string]$path, [string]$json, [bool]$withCsrf = $true) {
+function PostJson($session, [string]$path, [string]$json, [bool]$withCsrf = $true, $headers = @{}) {
     $request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Post, "$BaseUrl$path")
     $request.Content = [System.Net.Http.StringContent]::new($json, [System.Text.Encoding]::UTF8, 'application/json')
     [void]$request.Headers.TryAddWithoutValidation('Accept', 'application/json')
+    foreach ($k in $headers.Keys) { [void]$request.Headers.TryAddWithoutValidation($k, $headers[$k]) }
     if ($withCsrf) {
         $token = ($session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value
         [void]$request.Headers.TryAddWithoutValidation('X-XSRF-TOKEN', $token)
@@ -161,7 +162,51 @@ Check 'user without role is denied eligibility checks (403)' ([int](PostJson $no
 $audit = (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events?size=5").Content.ReadAsStringAsync().GetAwaiter().GetResult()
 Check 'eligibility check recorded in the audit log' ($audit -match 'REFUND_ELIGIBILITY_CHECK')
 
-Write-Host "`n[7] CSRF and logout (agent.alice)"
+Write-Host "`n[7] Refund requests and supervisor approval (no money moves; requests are rejected, not approved)"
+function Body($response) { return $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() }
+$tara = Login 'tara.supervisor'
+Check 'second supervisor tara.supervisor can sign in' ((Status $tara.Session '/api/v1/me') -eq 200)
+$taraMe = Body (Send $tara.Session 'GET' "$BaseUrl/api/v1/me" $null @{ Accept = 'application/json' })
+Check 'tara.supervisor has CARE_SUPERVISOR' ($taraMe -match '"CARE_SUPERVISOR"')
+Check 'sam.supervisor can still sign in' ((Status $sam.Session '/api/v1/me') -eq 200)
+
+# Find a payment that is eligible for a small partial refund right now (the window depends on today's date).
+$candidate = $null
+$settled = (Body (Send $alice.Session 'GET' "$BaseUrl/api/v1/payments?status=SETTLED&size=100" $null @{ Accept = 'application/json' })) | ConvertFrom-Json
+foreach ($p in $settled.content) {
+    $check = (Body (PostJson $alice.Session '/api/v1/refunds/eligibility-check' ('{"paymentRef":"' + $p.paymentRef + '","amount":"1.00","currency":"' + $p.currency + '"}'))) | ConvertFrom-Json
+    if ($check.decision -eq 'ELIGIBLE') { $candidate = $p; break }
+}
+Check 'found a payment eligible for a 1.00 refund' ($null -ne $candidate)
+if ($candidate) {
+    $refundBody = '{"paymentRef":"' + $candidate.paymentRef + '","amount":"1.00","currency":"' + $candidate.currency + '","reason":"CUSTOMER_REQUEST"}'
+    $key = 'smoke-' + [guid]::NewGuid()
+    Check 'refund request without Idempotency-Key is rejected (400)' ([int](PostJson $alice.Session '/api/v1/refunds' $refundBody).StatusCode -eq 400)
+    Check 'refund request without CSRF token is rejected (403)' ([int](PostJson $alice.Session '/api/v1/refunds' $refundBody $false @{ 'Idempotency-Key' = $key }).StatusCode -eq 403)
+    $created = PostJson $alice.Session '/api/v1/refunds' $refundBody $true @{ 'Idempotency-Key' = $key }
+    $aliceRefund = (Body $created) | ConvertFrom-Json
+    Check 'agent creates a refund request (201, PENDING_APPROVAL)' ([int]$created.StatusCode -eq 201 -and $aliceRefund.status -eq 'PENDING_APPROVAL')
+    $replay = PostJson $alice.Session '/api/v1/refunds' $refundBody $true @{ 'Idempotency-Key' = $key }
+    Check 'retry with the same key replays the original (200, Idempotent-Replayed)' ([int]$replay.StatusCode -eq 200 -and (($replay.Headers.GetValues('Idempotent-Replayed')) -contains 'true') -and ((Body $replay) -match $aliceRefund.refundRef))
+    $ref = $aliceRefund.refundRef
+    Check 'agent cannot approve (403)' ([int](PostJson $alice.Session "/api/v1/refunds/$ref/approve" '{}').StatusCode -eq 403)
+    Check 'admin cannot approve (403)' ([int](PostJson $ada.Session "/api/v1/refunds/$ref/approve" '{}').StatusCode -eq 403)
+    Check 'admin cannot create refund requests (403)' ([int](PostJson $ada.Session '/api/v1/refunds' $refundBody $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) }).StatusCode -eq 403)
+    Check 'admin can read refund requests (read-only)' ((Status $ada.Session "/api/v1/refunds/$ref") -eq 200)
+
+    $samRequest = (Body (PostJson $sam.Session '/api/v1/refunds' $refundBody $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) })) | ConvertFrom-Json
+    $self = PostJson $sam.Session "/api/v1/refunds/$($samRequest.refundRef)/approve" '{}'
+    Check 'supervisor cannot approve their own request (403 SELF_APPROVAL_FORBIDDEN)' ([int]$self.StatusCode -eq 403 -and (Body $self) -match 'SELF_APPROVAL_FORBIDDEN')
+    $taraReject = PostJson $tara.Session "/api/v1/refunds/$($samRequest.refundRef)/reject" '{"reason":"CUSTOMER_WITHDREW"}'
+    Check 'the other supervisor (tara) can decide on it' ([int]$taraReject.StatusCode -eq 200 -and (Body $taraReject) -match '"status":"REJECTED"')
+    $samReject = PostJson $sam.Session "/api/v1/refunds/$ref/reject" '{"reason":"CUSTOMER_WITHDREW"}'
+    Check "supervisor rejects the agent's request; reservation released" ([int]$samReject.StatusCode -eq 200)
+    Check 'a decided request cannot be decided again (409)' ([int](PostJson $tara.Session "/api/v1/refunds/$ref/approve" '{}').StatusCode -eq 409)
+    $audit = Body (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events?size=40" $null @{ Accept = 'application/json' })
+    Check 'refund actions and denials are in the audit log' ($audit -match 'REFUND_REQUEST_CREATE' -and $audit -match 'REFUND_REQUEST_REJECT' -and $audit -match '"outcome":"DENIED"')
+}
+
+Write-Host "`n[8] CSRF and logout (agent.alice)"
 $csrf = ($alice.Session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value
 Check 'XSRF-TOKEN cookie present' ([bool]$csrf)
 Check 'logout without CSRF token is rejected (403)' ([int](Send $alice.Session 'POST' "$BaseUrl/logout").StatusCode -eq 403)

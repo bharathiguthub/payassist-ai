@@ -42,4 +42,4 @@ $lines = Get-Content $example | ForEach-Object {
 [System.IO.File]::WriteAllLines($envFile, $lines, (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host "Created $envFile with random local secrets." -ForegroundColor Green
-Write-Host "Demo user password (all four synthetic users): $($values['PAYASSIST_DEMO_PASSWORD'])"
+Write-Host "Demo user password (all five synthetic users): $($values['PAYASSIST_DEMO_PASSWORD'])"

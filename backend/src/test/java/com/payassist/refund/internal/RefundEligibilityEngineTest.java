@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 class RefundEligibilityEngineTest {
 
+    static final java.util.UUID PAYMENT_ID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001");
     static final Instant NOW = Instant.parse("2026-11-16T12:00:00Z");
     static final Instant CAPTURED = NOW.minus(Duration.ofDays(30));
 
@@ -150,7 +151,7 @@ class RefundEligibilityEngineTest {
 
     @Test
     void paymentCurrencyOutsideThePolicyIsNotSupported() {
-        var payment = new RefundPosition("PAY-000001", new BigDecimal("100"), "JPY", PaymentStatus.SETTLED,
+        var payment = new RefundPosition(PAYMENT_ID, "PAY-000001", new BigDecimal("100"), "JPY", PaymentStatus.SETTLED,
                 PaymentMethod.CARD, CAPTURED, CAPTURED, new BigDecimal("0"), 0, true, true, 1);
         RefundEligibility result = engine.evaluate(payment, new BigDecimal("10"), "JPY", BigDecimal.ZERO, NOW, null);
         assertThat(result.reasons()).extracting(Reason::code).contains(ReasonCode.CURRENCY_NOT_SUPPORTED);
@@ -184,7 +185,7 @@ class RefundEligibilityEngineTest {
 
     @Test
     void migratedPaymentWithoutCaptureEventUsesTheEarlierCreationTime() {
-        var payment = new RefundPosition("PAY-000001", new BigDecimal("100.00"), "GBP", PaymentStatus.SETTLED,
+        var payment = new RefundPosition(PAYMENT_ID, "PAY-000001", new BigDecimal("100.00"), "GBP", PaymentStatus.SETTLED,
                 PaymentMethod.CARD, NOW.minus(Duration.ofDays(130)), null, new BigDecimal("0.00"), 0, true, false, 0);
         RefundEligibility result = evaluate(payment, "10.00", "GBP");
         assertThat(result.refundWindow().basis()).isEqualTo(WindowBasis.PAYMENT_CREATED_AT);
@@ -230,7 +231,7 @@ class RefundEligibilityEngineTest {
 
     @Test
     void missingApprovalLimitFailsSafeToManualReview() {
-        var payment = new RefundPosition("PAY-000001", new BigDecimal("100.00"), "EUR", PaymentStatus.SETTLED,
+        var payment = new RefundPosition(PAYMENT_ID, "PAY-000001", new BigDecimal("100.00"), "EUR", PaymentStatus.SETTLED,
                 PaymentMethod.CARD, CAPTURED, CAPTURED, new BigDecimal("0.00"), 0, true, true, 1);
         RefundEligibility result = engine.evaluate(payment, new BigDecimal("1.00"), "EUR", BigDecimal.ZERO, NOW, null);
         assertThat(result.decision()).isEqualTo(Decision.MANUAL_REVIEW);
@@ -268,7 +269,7 @@ class RefundEligibilityEngineTest {
 
     private static RefundPosition position(PaymentStatus status, boolean refundable, PaymentMethod method,
             String amount, String refunded, Instant capturedAt) {
-        return new RefundPosition("PAY-000001", new BigDecimal(amount), "GBP", status, method,
+        return new RefundPosition(PAYMENT_ID, "PAY-000001", new BigDecimal(amount), "GBP", status, method,
                 capturedAt != null ? capturedAt.minusSeconds(600) : NOW.minus(Duration.ofDays(1)), capturedAt,
                 new BigDecimal(refunded), new BigDecimal(refunded).signum() > 0 ? 1 : 0, refundable, true, 3);
     }

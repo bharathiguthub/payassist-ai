@@ -8,7 +8,8 @@ with AI agents.
 > for payment investigation over **synthetic data only**. No AI features yet.
 > See [docs/architecture.md](docs/architecture.md) and the decision records in [docs/adr/](docs/adr/).
 > **Phase 2 in progress** (branch `feature/phase2-payment-domain`): payment lifecycle, timeline,
-> investigation summary and the refund eligibility engine are done (refund requests, approval and disputes are next). API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
+> investigation summary, refund eligibility, and refund requests with supervisor approval are done (disputes are next).
+> No real money ever moves: approvals record simulated refunds. API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
 
 | Layer | Technology |
 |---|---|
@@ -61,7 +62,7 @@ Open **http://localhost:3000** and click **Sign in with company SSO**.
 
 ### Synthetic demo users
 
-All four users share the password stored in `.env` as `PAYASSIST_DEMO_PASSWORD`:
+All five users share the password stored in `.env` as `PAYASSIST_DEMO_PASSWORD`:
 
 ```powershell
 Select-String -Path .env -Pattern '^PAYASSIST_DEMO_PASSWORD'
@@ -69,9 +70,10 @@ Select-String -Path .env -Pattern '^PAYASSIST_DEMO_PASSWORD'
 
 | Username | Role | What they can see |
 |---|---|---|
-| `agent.alice` | CARE_AGENT | Payment search and details |
-| `sam.supervisor` | CARE_SUPERVISOR | + Supervisor statistics |
-| `ada.admin` | ADMIN | + Audit log |
+| `agent.alice` | CARE_AGENT | Payment search and details, refund eligibility, refund requests |
+| `sam.supervisor` | CARE_SUPERVISOR | + Supervisor statistics, refund approval queue |
+| `tara.supervisor` | CARE_SUPERVISOR | Second supervisor (separation of duties: approves Sam's requests) |
+| `ada.admin` | ADMIN | + Audit log; refunds read-only (cannot request or approve) |
 | `nora.norole` | (none) | "No access" page; every API returns 403 |
 
 Try searching for `PAY-0000` (payment reference prefix) or `CUS-00001` (customer reference), or
@@ -210,7 +212,8 @@ startup fails rather than running insecurely.
 | `failed to connect to the docker API` | Start Docker Desktop and wait until `docker version` shows the Server section. |
 | Keycloak "Invalid parameter: redirect_uri" | Use http://localhost:3000 or :5173 exactly (not 127.0.0.1); only these are registered. |
 | Login loop, or "cookie not found" in Keycloak | Use `localhost` consistently; clear cookies for localhost. |
-| Demo password rejected after editing `.env` | The realm is imported once per container: `docker compose up -d --force-recreate keycloak`. |
+| Demo password rejected after editing `.env` | The realm is imported once per container: `docker compose up -d --force-recreate keycloak`. Re-importing ends all Keycloak sessions and discards Admin Console changes; user IDs are kept because the realm JSON pins them. |
+| `tara.supervisor` cannot sign in on an older local stack | Your Keycloak container predates the realm change. Either re-import as above, or add the user without a restart through the Keycloak Admin API (`kcadm.sh`) as described in ADR 0011. |
 | `npm install` crashes with `reading 'edgesOut'` | npm 11.3 bug; `frontend/.npmrc` sets `legacy-peer-deps=true`. Run from `frontend\`. |
 | Backend exits with `Binding to target ... failed` / missing property | An environment variable is missing; in dev mode dot-source `scripts\dev-env.ps1` first. |
 

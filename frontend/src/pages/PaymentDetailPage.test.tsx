@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
 import { PaymentDetailPage } from './PaymentDetailPage';
 import { renderWithProviders } from '../test/render';
-import { server } from '../test/server';
+import { loggedInAs, server } from '../test/server';
 import { sampleDetails, sampleSummary, sampleTimeline } from '../test/investigation-fixtures';
 
 function renderDetail(ref = 'PAY-000001') {
@@ -104,5 +104,19 @@ describe('PaymentDetailPage investigation', () => {
     renderDetail();
     expect(screen.getByText('Loading…')).toBeInTheDocument();
     expect(await screen.findByText('Loading timeline…')).toBeInTheDocument();
+  });
+
+  it('offers the refund request form to agents but not to read-only admins', async () => {
+    stubInvestigationApis();
+    loggedInAs(['CARE_AGENT']);
+    const { unmount } = renderDetail();
+    expect(await screen.findByRole('heading', { name: 'Request a refund' })).toBeInTheDocument();
+    expect(await screen.findByText('No refund requests for this payment.')).toBeInTheDocument();
+    unmount();
+
+    loggedInAs(['ADMIN']);
+    renderDetail();
+    expect(await screen.findByRole('heading', { name: 'Refund requests' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Request a refund' })).not.toBeInTheDocument();
   });
 });

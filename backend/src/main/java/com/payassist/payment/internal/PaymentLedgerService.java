@@ -1,6 +1,7 @@
 package com.payassist.payment.internal;
 
 import com.payassist.payment.PaymentEventType;
+import com.payassist.payment.PaymentHistory.RefundPosition;
 import com.payassist.payment.PaymentLedger;
 import com.payassist.payment.PaymentStatus;
 import com.payassist.payment.RecordPaymentEvent;
@@ -19,6 +20,7 @@ import java.util.regex.Pattern;
 import org.slf4j.MDC;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -87,6 +89,15 @@ class PaymentLedgerService implements PaymentLedger {
         payments.flush(); // increments the version now, so the result reports the committed value
 
         return new RecordedPaymentEvent(event.getId(), paymentRef, sequenceNo, type, from, to, payment.getVersion());
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public RefundPosition lockForRefund(String paymentRef) {
+        String ref = paymentRef.toUpperCase();
+        Payment payment = payments.findByPaymentRefForUpdate(ref)
+                .orElseThrow(() -> new ResourceNotFoundException(RESOURCE, ref));
+        return RefundPositions.of(payment, events);
     }
 
     private static void validateReasonCode(RecordPaymentEvent command) {

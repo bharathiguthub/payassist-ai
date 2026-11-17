@@ -13,6 +13,7 @@ export function Layout({ user }: { user: CurrentUser }) {
         <nav aria-label="Main">
           <NavLink to="/payments">Payments</NavLink>
           {hasAnyRole(user, ['CARE_SUPERVISOR', 'ADMIN']) && <NavLink to="/supervisor">Supervisor</NavLink>}
+          {hasAnyRole(user, ['CARE_SUPERVISOR', 'ADMIN']) && <NavLink to="/refunds/approvals">Refund approvals</NavLink>}
           {hasAnyRole(user, ['ADMIN']) && <NavLink to="/admin/audit">Audit log</NavLink>}
         </nav>
         <div className="user">
@@ -28,7 +29,7 @@ export function Layout({ user }: { user: CurrentUser }) {
       <main>
         <Outlet />
       </main>
-      <footer className="footer">Synthetic data only &middot; Phase 1</footer>
+      <footer className="footer">Synthetic data only &middot; no real money moves</footer>
     </div>
   );
 }

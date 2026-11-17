@@ -5,11 +5,14 @@ import static com.payassist.identity.Roles.CARE_AGENT;
 import static com.payassist.identity.Roles.CARE_SUPERVISOR;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authorization.AuthorizationEventPublisher;
+import org.springframework.security.authorization.SpringAuthorizationEventPublisher;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -46,6 +49,15 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 @EnableConfigurationProperties(PayAssistSecurityProperties.class)
 class SecurityConfig {
 
+    /**
+     * Publishes authorization denials (URL rules and method security) as application events, so they can
+     * be audited ({@link AuthorizationDenialAuditor}). Grants are not published.
+     */
+    @Bean
+    AuthorizationEventPublisher authorizationEventPublisher(ApplicationEventPublisher publisher) {
+        return new SpringAuthorizationEventPublisher(publisher);
+    }
+
     @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -80,10 +92,16 @@ class SecurityConfig {
                         // Any logged-in user may ask "who am I" so the UI can explain missing roles.
                         .requestMatchers("/api/v1/me").authenticated()
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)
-                        // Explicit even though /api/** below would match: refund endpoints get narrower
-                        // rules in milestone 4, and each must be listed deliberately.
+                        // Refund endpoints: every route listed deliberately; anything else under /refunds is denied.
+                        // ADMIN is read-only (eligibility check and reads); only supervisors decide.
                         .requestMatchers(HttpMethod.POST, "/api/v1/refunds/eligibility-check")
                                 .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/refunds/*/approve", "/api/v1/refunds/*/reject")
+                                .hasRole(CARE_SUPERVISOR)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/refunds").hasAnyRole(CARE_AGENT, CARE_SUPERVISOR)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/refunds", "/api/v1/refunds/*")
+                                .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
+                        .requestMatchers("/api/v1/refunds", "/api/v1/refunds/**").denyAll()
                         .requestMatchers("/api/**").hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2

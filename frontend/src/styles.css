@@ -141,3 +141,7 @@ dd { margin: 0; }
 .timeline-meta { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; overflow-wrap: anywhere; }
 .findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .findings li { display: flex; gap: 0.5rem; align-items: baseline; }
+
+/* Phase 2: refund requests and approvals */
+.success { color: var(--success-fg); }
+.inline-actions { display: inline-flex; gap: 0.4rem; align-items: center; margin-left: 0.4rem; flex-wrap: wrap; }

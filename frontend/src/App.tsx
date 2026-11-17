@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PaymentDetailPage } from './pages/PaymentDetailPage';
 import { PaymentSearchPage } from './pages/PaymentSearchPage';
+import { RefundApprovalsPage } from './pages/RefundApprovalsPage';
 import { SupervisorPage } from './pages/SupervisorPage';
 
 export function App() {
@@ -35,6 +36,14 @@ export function App() {
           element={
             <RequireRole roles={['CARE_SUPERVISOR', 'ADMIN']}>
               <SupervisorPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="refunds/approvals"
+          element={
+            <RequireRole roles={['CARE_SUPERVISOR', 'ADMIN']}>
+              <RefundApprovalsPage />
             </RequireRole>
           }
         />

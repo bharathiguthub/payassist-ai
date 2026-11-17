@@ -53,5 +53,12 @@ public final class CurrentActor {
         }
     }
 
+    /** Whether the current user holds the PayAssist role (e.g. {@code Roles.CARE_SUPERVISOR}). */
+    public static boolean hasRole(String role) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> ("ROLE_" + role).equals(a.getAuthority()));
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(CurrentActor.class);
 }

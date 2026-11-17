@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Public read API over a payment and its recorded history. Everything returned is a recorded fact
@@ -24,6 +25,7 @@ public interface PaymentHistory {
     RefundPosition refundPosition(String paymentRef);
 
     /**
+     * @param paymentId               internal ID, for references held by other modules (no cross-module JPA relations)
      * @param refundTransitionAllowed whether the payment state machine allows {@code REFUND_RECORDED} now
      * @param capturedAt              when funds were first captured; {@code null} if no capture was recorded
      *                                (migrated payments with incomplete history, or never captured)
@@ -32,6 +34,7 @@ public interface PaymentHistory {
      * @param version                 payment version the facts were read at
      */
     record RefundPosition(
+            UUID paymentId,
             String paymentRef,
             BigDecimal amount,
             String currency,

@@ -4,11 +4,9 @@ import com.payassist.customer.CustomerDirectory;
 import com.payassist.customer.CustomerSummary;
 import com.payassist.identity.CurrentActor;
 import com.payassist.identity.Roles;
-import com.payassist.payment.PaymentEventType;
 import com.payassist.payment.PaymentHistory;
 import com.payassist.shared.AuditRecord;
 import com.payassist.shared.ResourceNotFoundException;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -64,16 +62,7 @@ public class PaymentHistoryService implements PaymentHistory {
     public RefundPosition refundPosition(String paymentRef) {
         Payment p = payments.findByPaymentRef(paymentRef.toUpperCase())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentRef));
-        UUID id = p.getId();
-        Instant capturedAt = events.findFirstByPaymentIdAndEventTypeOrderByOccurredAtAscSequenceNoAsc(id,
-                PaymentEventType.CAPTURED).map(PaymentEvent::getOccurredAt).orElse(null);
-        BigDecimal refunded = events.sumAmountByType(id, PaymentEventType.REFUND_RECORDED).setScale(p.getAmount().scale());
-        int refundCount = (int) events.countByPaymentIdAndEventType(id, PaymentEventType.REFUND_RECORDED);
-        boolean historyComplete = events.countByPaymentIdAndEventType(id, PaymentEventType.LEGACY_SNAPSHOT) == 0;
-        return new RefundPosition(p.getPaymentRef(), p.getAmount(), p.getCurrency(), p.getStatus(),
-                p.getPaymentMethod(), p.getCreatedAt(), capturedAt, refunded, refundCount,
-                PaymentTransitions.isAllowed(p.getStatus(), PaymentEventType.REFUND_RECORDED, p.getPaymentMethod()),
-                historyComplete, p.getVersion());
+        return RefundPositions.of(p, events);
     }
 
     /** Timeline for display to the current user; the access is audited in the same transaction (fail closed). */

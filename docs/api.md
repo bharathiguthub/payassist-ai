@@ -30,6 +30,7 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | 404 | — | Resource not found |
 | 409 | `INVALID_STATE_TRANSITION` | The payment's lifecycle does not allow the action in its current status |
 | 409 | `CONCURRENT_MODIFICATION` | Another request changed the resource first; reload and retry |
+| 403 | e.g. `SELF_APPROVAL_FORBIDDEN`, `ESCALATION_REQUIRED` | Role allowed, but a business authorization rule forbids this action |
 | 422 | e.g. `INVALID_AMOUNT_SCALE`, `UNSUPPORTED_CURRENCY`, `INVALID_AMOUNT`, `CURRENCY_REQUIRED`, `REFUND_EXCEEDS_PAYMENT_AMOUNT` | Business rule violated (malformed money is rejected, never rounded) |
 
 ## Access matrix
@@ -42,6 +43,9 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | `GET /payments/{ref}/timeline` | ✔ | ✔ | ✔ read-only | 403 |
 | `GET /payments/{ref}/investigation-summary` | ✔ | ✔ | ✔ read-only | 403 |
 | `POST /refunds/eligibility-check` | ✔ | ✔ | ✔ read-only | 403 |
+| `POST /refunds` | ✔ | ✔ | 403 | 403 |
+| `GET /refunds`, `GET /refunds/{ref}` | ✔ | ✔ | ✔ read-only | 403 |
+| `POST /refunds/{ref}/approve`, `/reject` | 403 | ✔ (not own) | 403 | 403 |
 | `GET /payments/stats` | 403 | ✔ | ✔ | 403 |
 | `GET /admin/audit-events` | 403 | 403 | ✔ | 403 |
 
@@ -218,3 +222,72 @@ else `ELIGIBLE` (reason `WITHIN_POLICY`). Rules after a failed status check repo
 
 All values are the **synthetic** policy in `application.yml` (`payassist.refund.policy`). Reason codes are stable;
 the decision is re-validated atomically when a refund request is created (milestone 4).
+
+### Refund requests and supervisor approval
+
+Workflow and guarantees: [ADR 0011](adr/0011-refund-requests-and-approval.md). No real money moves: an approval
+records a simulated `REFUND_RECORDED` fact in the payment ledger. All POSTs need the CSRF token.
+
+| Method and path | Roles | Purpose |
+|---|---|---|
+| `POST /refunds` | CARE_AGENT, CARE_SUPERVISOR | Create a request (requires `Idempotency-Key`) |
+| `GET /refunds/{refundRef}` | all care roles (ADMIN read-only) | One request (audited `REFUND_REQUEST_VIEW`) |
+| `GET /refunds?status=&paymentRef=&mine=&page=&size=` | all care roles (ADMIN read-only) | List, newest first; `status` may repeat |
+| `POST /refunds/{refundRef}/approve` | CARE_SUPERVISOR | Approve (`{"expectedVersion": n}` optional) |
+| `POST /refunds/{refundRef}/reject` | CARE_SUPERVISOR | Reject (`{"reason": "...", "expectedVersion": n}`) |
+
+Any other method or path under `/refunds` is denied (403).
+
+**Create** — headers `Idempotency-Key: <8–64 chars [A-Za-z0-9_-]>`, `X-XSRF-TOKEN`; body:
+
+```json
+{ "paymentRef": "PAY-000072", "amount": "25.50", "currency": "GBP", "reason": "CUSTOMER_REQUEST" }
+```
+
+`reason` ∈ `CUSTOMER_REQUEST`, `DUPLICATE_CHARGE`, `PRODUCT_NOT_RECEIVED`, `NOT_AS_DESCRIBED`, `SERVICE_NOT_PROVIDED`,
+`GOODWILL`. Eligibility is re-validated under the payment row lock and the amount is reserved.
+
+| Response | When |
+|---|---|
+| 201 + `Location`, `Idempotent-Replayed: false` | created (`PENDING_APPROVAL`, or `ESCALATION_REQUIRED` above the supervisor limit) |
+| 200 + `Idempotent-Replayed: true` | same user, key and payload as an earlier request: the original is returned |
+| 400 | missing/invalid `Idempotency-Key` or body |
+| 422 `IDEMPOTENCY_KEY_REUSED` | same key, different payload |
+| 422 `REFUND_NOT_ELIGIBLE` + `reasons`, `policyVersion` | eligibility re-validation failed (e.g. `AMOUNT_EXCEEDS_REFUNDABLE` with pending reservations) |
+| 422 `INVALID_AMOUNT_SCALE` / `UNSUPPORTED_CURRENCY` | malformed money (never rounded) |
+
+**Refund request view** (abridged):
+
+```json
+{
+  "schemaVersion": "1.0", "refundRef": "RFD-1CB039915C4B", "paymentRef": "PAY-000254",
+  "amount": 1.00, "currency": "INR", "reason": "CUSTOMER_REQUEST", "status": "PENDING_APPROVAL",
+  "eligibility": { "decision": "ELIGIBLE", "reasonCodes": ["WITHIN_POLICY"], "policyVersion": "SYNTHETIC-REFUND-POLICY-2026.11-v1" },
+  "requestedBy": "agent.alice", "requestedAt": "...", "correlationId": "...",
+  "decision": null,
+  "allowedActions": ["APPROVE", "REJECT"],
+  "version": 0
+}
+```
+
+`decision` (once decided): `outcome`, `reasonCode` (`APPROVED` or a rejection reason), `decidedBy`, `decidedAt`,
+`correlationId`, `ledgerEventRecorded`. `allowedActions` is computed for the **current** user (role, separation of
+duties, status, limit); it is a UI hint and every action is re-checked.
+
+**Approve / reject errors**
+
+| HTTP | `code` | Meaning |
+|---|---|---|
+| 403 | `SELF_APPROVAL_FORBIDDEN` / `SELF_REJECTION_FORBIDDEN` | the requester cannot decide on their own request |
+| 403 | `ESCALATION_REQUIRED` | above the supervisor limit; no supervisor (or ADMIN) can approve |
+| 403 | `APPROVAL_LIMIT_EXCEEDED` | amount above the current supervisor limit |
+| 409 | `INVALID_STATE_TRANSITION` | already decided (double approval / approve after reject) |
+| 409 | `CONCURRENT_MODIFICATION` | `expectedVersion` is stale |
+| 422 | `REFUND_NO_LONGER_ELIGIBLE` + `reasons` | facts changed since the request (e.g. `PAYMENT_DISPUTED`) |
+
+`reject` reasons: `OUTSIDE_POLICY`, `INSUFFICIENT_EVIDENCE`, `DUPLICATE_REQUEST`, `CUSTOMER_WITHDREW`,
+`SUSPECTED_FRAUD`, `ESCALATION_NOT_AVAILABLE`.
+
+**Audit**: `REFUND_REQUEST_CREATE`, `REFUND_REQUEST_VIEW`, `REFUND_REQUEST_APPROVE`, `REFUND_REQUEST_REJECT` with
+`outcome` `SUCCESS` / `DENIED` / `FAILED` and details (refs, amount, currency, status, codes; never personal data).
+Role-based denials of signed-in users are recorded as `ACCESS_DENIED` / `DENIED` with the method and path.

@@ -41,6 +41,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 @ExtendWith(MockitoExtension.class)
 class RefundEligibilityServiceTest {
 
+    static final java.util.UUID PAYMENT_ID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final Instant NOW = Instant.parse("2026-11-16T12:00:00Z");
 
     @Mock
@@ -73,7 +74,7 @@ class RefundEligibilityServiceTest {
     @Test
     void evaluatesAuthoritativeFactsAndAuditsOnlyNonSensitiveDetails() {
         when(payments.refundPosition("PAY-000001")).thenReturn(position());
-        when(reservations.reservedAmount("PAY-000001")).thenReturn(BigDecimal.ZERO);
+        when(reservations.reservedAmount(PAYMENT_ID)).thenReturn(BigDecimal.ZERO);
 
         RefundEligibility result = service.check("PAY-000001", new BigDecimal("25"), "GBP");
 
@@ -109,7 +110,7 @@ class RefundEligibilityServiceTest {
     @Test
     void trailingZerosAreNotAPrecisionProblem() {
         when(payments.refundPosition("PAY-000001")).thenReturn(position());
-        when(reservations.reservedAmount("PAY-000001")).thenReturn(BigDecimal.ZERO);
+        when(reservations.reservedAmount(PAYMENT_ID)).thenReturn(BigDecimal.ZERO);
         assertThat(service.check("PAY-000001", new BigDecimal("10.5000"), "GBP").requestedAmount()).hasToString("10.50");
     }
 
@@ -123,7 +124,7 @@ class RefundEligibilityServiceTest {
 
     private static RefundPosition position() {
         Instant captured = NOW.minus(Duration.ofDays(10));
-        return new RefundPosition("PAY-000001", new BigDecimal("100.00"), "GBP", PaymentStatus.SETTLED,
+        return new RefundPosition(PAYMENT_ID, "PAY-000001", new BigDecimal("100.00"), "GBP", PaymentStatus.SETTLED,
                 PaymentMethod.CARD, captured, captured, new BigDecimal("0.00"), 0, true, true, 4);
     }
 

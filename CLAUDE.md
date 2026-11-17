@@ -86,7 +86,15 @@ Compare users by `Actor.subject` (OIDC `sub`), never by username.
 ordered `EligibilityRules`. Don't duplicate rules owned by `payment`: status refundability comes from
 `PaymentHistory.refundPosition` (state machine), refund totals from the ledger's query. Policy is validated config
 `payassist.refund.policy` with a `version`: bump it whenever a value changes. Eligibility is advisory; refund
-request creation (M4) must re-run the engine under the payment row lock.
+request creation re-runs the engine under the payment row lock.
+
+**Refund requests** (ADR 0011): `RefundRequests` (tool-safe: request/status/list) and `RefundApprovals`
+(human-only: approve/reject) implemented by `refund/internal/RefundRequestService`. Every refund write runs in one
+READ COMMITTED transaction that first calls `PaymentLedger.lockForRefund` (payment row lock), then locks the
+request row: keep that lock order. Pending requests reserve their amount; approval records `REFUND_RECORDED`
+once (`refund_decisions` is unique per request and append-only); `Idempotency-Key` is unique per requester.
+Business authorization failures throw `DomainException.Forbidden` (403 + code). Refusals are audited in a
+separate transaction; role denials are audited via `AuthorizationDenialAuditor` (`ACCESS_DENIED`).
 
 **Data**: Flyway owns the schema (`ddl-auto=validate`). Add schema changes as new `db/migration/V<n>__*.sql`.
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`
@@ -108,5 +116,9 @@ deliberately deferred to the RAG phase.
 - Spring redirects unauthenticated *non-API* requests to login only when `Accept: text/html`; otherwise 401.
 - Never use `SecurityMockMvcRequestPostProcessors.csrf()` in `*IT` classes: it swaps the CSRF repository of the
   shared cached context and later tests lose the `XSRF-TOKEN` cookie. Use `support/RealCsrf.token(mvc)`.
+- Mutating refund ITs use the seed payments allocated in `support/RefundTestPayments` (guarded by `fresh()`)
+  and the personas in `support/TestUsers`; never pick payments other mutating tests select by position.
+- The running Keycloak uses an embedded dev DB (no volume): recreating the container re-imports the realm,
+  ends sessions and drops console changes. The realm JSON pins user IDs so `sub` values survive a re-import.
 - Integration tests run with a fixed clock (`FixedClockTestConfig`, 2026-11-16T12:00Z) because seed dates are
   absolute and refund windows/investigation thresholds are time-based.

@@ -44,6 +44,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return domainProblem(HttpStatus.UNPROCESSABLE_ENTITY, "Business rule violated", ex);
     }
 
+    @ExceptionHandler(DomainException.Forbidden.class)
+    ProblemDetail handleForbidden(DomainException.Forbidden ex) {
+        return domainProblem(HttpStatus.FORBIDDEN, "Action not permitted", ex);
+    }
+
     /** Optimistic-lock version mismatch or lock contention: the client should reload and retry. */
     @ExceptionHandler(ConcurrencyFailureException.class)
     ProblemDetail handleConcurrencyFailure(ConcurrencyFailureException ex) {
@@ -60,6 +65,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setTitle(title);
         problem.setType(URI.create(PROBLEM_BASE + ex.getCode().toLowerCase().replace('_', '-')));
         problem.setProperty(CODE_PROPERTY, ex.getCode());
+        ex.getProperties().forEach(problem::setProperty);
         return problem;
     }
 }

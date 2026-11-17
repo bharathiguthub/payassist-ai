@@ -84,7 +84,7 @@ public class RefundEligibilityService {
         }
 
         RefundPosition position = payments.refundPosition(paymentRef);
-        BigDecimal reserved = reservations.reservedAmount(position.paymentRef());
+        BigDecimal reserved = reservations.reservedAmount(position.paymentId());
         RefundEligibility result = engine.evaluate(position, requested, requestCurrency, reserved,
                 Instant.now(clock), MDC.get(CorrelationIdFilter.MDC_KEY));
 

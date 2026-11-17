@@ -86,8 +86,10 @@ export interface ProblemDetail {
   title?: string;
   status?: number;
   detail?: string;
-  /** Stable business-rule code (e.g. INVALID_AMOUNT_SCALE), present on 409/422 responses. */
+  /** Stable business-rule code (e.g. INVALID_AMOUNT_SCALE), present on 403/409/422 business-rule responses. */
   code?: string;
+  /** Eligibility reason codes behind REFUND_NOT_ELIGIBLE / REFUND_NO_LONGER_ELIGIBLE. */
+  reasons?: string[];
 }
 
 // --- Phase 2: payment timeline and investigation summary -------------------------------------
@@ -248,4 +250,61 @@ export interface EligibilityCheckRequest {
   paymentRef: string;
   amount?: string;
   currency?: string;
+}
+
+// --- Phase 2: refund requests and supervisor approval ---------------------------------------------
+
+export const REFUND_REASONS = [
+  'CUSTOMER_REQUEST',
+  'DUPLICATE_CHARGE',
+  'PRODUCT_NOT_RECEIVED',
+  'NOT_AS_DESCRIBED',
+  'SERVICE_NOT_PROVIDED',
+  'GOODWILL',
+] as const;
+export type RefundReason = (typeof REFUND_REASONS)[number];
+
+export const REJECTION_REASONS = [
+  'OUTSIDE_POLICY',
+  'INSUFFICIENT_EVIDENCE',
+  'DUPLICATE_REQUEST',
+  'CUSTOMER_WITHDREW',
+  'SUSPECTED_FRAUD',
+  'ESCALATION_NOT_AVAILABLE',
+] as const;
+export type RejectionReason = (typeof REJECTION_REASONS)[number];
+
+export type RefundRequestStatus = 'PENDING_APPROVAL' | 'ESCALATION_REQUIRED' | 'APPROVED' | 'REJECTED';
+
+export interface RefundRequestView {
+  schemaVersion: string;
+  refundRef: string;
+  paymentRef: string;
+  amount: number;
+  currency: string;
+  reason: RefundReason;
+  status: RefundRequestStatus;
+  eligibility: { decision: EligibilityDecision; reasonCodes: string[]; policyVersion: string };
+  requestedBy: string;
+  requestedAt: string;
+  correlationId: string | null;
+  decision: {
+    outcome: RefundRequestStatus;
+    reasonCode: string;
+    decidedBy: string;
+    decidedAt: string;
+    correlationId: string | null;
+    ledgerEventRecorded: boolean;
+  } | null;
+  /** What the current user may do next. A UI hint: the server re-checks every action. */
+  allowedActions: ('APPROVE' | 'REJECT')[];
+  version: number;
+}
+
+/** The amount is a decimal string so no binary floating point ever touches money. */
+export interface CreateRefundRequestBody {
+  paymentRef: string;
+  amount: string;
+  currency: string;
+  reason: RefundReason;
 }

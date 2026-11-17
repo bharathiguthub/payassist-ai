@@ -72,6 +72,7 @@
   ],
   "users": [
     {
+      "id": "6aeecd44-cc8c-4b2d-897e-0a072b622bfe",
       "username": "agent.alice",
       "enabled": true,
       "emailVerified": true,
@@ -82,6 +83,7 @@
       "realmRoles": ["CARE_AGENT"]
     },
     {
+      "id": "ce96a318-f6e7-4e8d-ac08-40c3f612d1ec",
       "username": "sam.supervisor",
       "enabled": true,
       "emailVerified": true,
@@ -92,6 +94,7 @@
       "realmRoles": ["CARE_SUPERVISOR"]
     },
     {
+      "id": "5e063c5a-7d5d-4497-9956-1157dcf4d977",
       "username": "ada.admin",
       "enabled": true,
       "emailVerified": true,
@@ -102,6 +105,18 @@
       "realmRoles": ["ADMIN"]
     },
     {
+      "id": "46b6f5a9-61ce-43dc-b109-582073a38369",
+      "username": "tara.supervisor",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Tara",
+      "lastName": "Supervisor",
+      "email": "tara.supervisor@example.com",
+      "credentials": [{ "type": "password", "value": "${PAYASSIST_DEMO_PASSWORD}", "temporary": false }],
+      "realmRoles": ["CARE_SUPERVISOR"]
+    },
+    {
+      "id": "335337ab-ca52-4b62-bb74-551d68809796",
       "username": "nora.norole",
       "enabled": true,
       "emailVerified": true,

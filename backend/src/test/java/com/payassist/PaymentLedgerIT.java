@@ -95,8 +95,13 @@ class PaymentLedgerIT {
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
         assertThatThrownBy(() -> jdbc.update("delete from payment_events where id = ?::uuid", eventId))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
-        assertThatThrownBy(() -> jdbc.execute("truncate payment_events"))
+        // Since V5, refund_decisions references payment_events, so PostgreSQL refuses a plain TRUNCATE even
+        // before the trigger runs; with CASCADE the append-only trigger itself refuses it.
+        long rows = jdbc.queryForObject("select count(*) from payment_events", Long.class);
+        assertThatThrownBy(() -> jdbc.execute("truncate payment_events")).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.execute("truncate payment_events cascade"))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+        assertThat(jdbc.queryForObject("select count(*) from payment_events", Long.class)).isEqualTo(rows);
     }
 
     @Test

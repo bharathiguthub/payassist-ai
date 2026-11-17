@@ -35,6 +35,18 @@ public final class Roles {
      */
     public static final String CHECK_REFUND_ELIGIBILITY = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
 
+    /** Create refund requests. ADMIN is deliberately excluded (read-only oversight, no money actions). */
+    public static final String REQUEST_REFUNDS = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR')";
+
+    /** Read refund requests. ADMIN is granted this explicitly, read-only. */
+    public static final String READ_REFUNDS = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
+
+    /**
+     * Approve or reject refund requests: CARE_SUPERVISOR only. Business rules add separation of duties
+     * (never one's own request) and the supervisor approval limit. ADMIN is deliberately excluded.
+     */
+    public static final String DECIDE_REFUNDS = "hasRole('CARE_SUPERVISOR')";
+
     private Roles() {
     }
 }

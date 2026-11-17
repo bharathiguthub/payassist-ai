@@ -112,8 +112,8 @@ com.payassist
 ├── payment    PaymentStatus, PaymentMethod, PaymentViewedEvent, PaymentLedger (write), PaymentHistory (read)
 │              (public API) · internal/ (entities, state machine, ledger, history, queries) · web/
 ├── investigation  InvestigationService, InvestigationSummary (public API; future AI tool seam) · internal/ (rules) · web/
-├── refund     RefundEligibilityService, RefundEligibility (public API; future AI tool seam) · internal/ (policy,
-│              rules engine, reservations port) · web/
+├── refund     RefundEligibilityService, RefundRequests (tool-safe), RefundApprovals (human-only), views
+│              (public API) · internal/ (policy, rules engine, reservations, request workflow) · web/
 ├── audit      internal/ (entity, listeners for PaymentViewedEvent and AuditRecord) · web/ (admin audit API)
 └── shared     OPEN module: Actor, AuditRecord, DomainException, MonetaryAmounts, Problem Details handler,
                PageResponse, correlation IDs, Clock
@@ -145,7 +145,9 @@ Rules (checked by `ModularityTest` using Spring Modulith):
 |---|---|---|
 | `customers` | Synthetic customers | `customer_ref` unique; email always masked in API responses |
 | `payments` | Synthetic payments | Status/method enforced with CHECK constraints; **no PAN, CVV or bank account data** |
-| `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the operation it audits; actor subject + correlation ID since V3; non-sensitive JSONB `details` since V4 |
+| `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the operation it audits; actor subject + correlation ID since V3; non-sensitive JSONB `details` since V4; `outcome` SUCCESS/DENIED/FAILED since V5 |
+| `refund_requests` | Refund requests (Phase 2) | Reserve their amount while pending; idempotency key unique per requester; optimistic `version` |
+| `refund_decisions` | Approve/reject decisions | Append-only, one per request; approvals reference their unique `REFUND_RECORDED` ledger event |
 | `payment_events` | Payment history (Phase 2) | Append-only (DB trigger); written only by `PaymentLedger` together with the status change; see [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md) |
 
 Migrations: `backend/src/main/resources/db/migration` (all environments).
@@ -161,7 +163,8 @@ migration loaded **only** by the `dev` profile and tests.
 | M1 Payment lifecycle + event history | Done | [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md), [guide](learning/phase2-m1-payment-lifecycle.md) |
 | M2 Timeline + investigation summary | Done | [ADR 0009](adr/0009-deterministic-investigation-summary.md), [guide](learning/phase2-m2-investigation.md), [API](api.md) |
 | M3 Refund eligibility engine | Done | [ADR 0010](adr/0010-refund-eligibility-engine.md), [guide](learning/phase2-m3-refund-eligibility.md), [API](api.md) |
-| M4–M8 Refund requests/approval, disputes, audit, frontend, docs | Planned | |
+| M4 Refund requests and supervisor approval | Done | [ADR 0011](adr/0011-refund-requests-and-approval.md), [guide](learning/phase2-m4-refund-approval.md), [API](api.md) |
+| M5–M8 Disputes, audit hardening, frontend polish, docs | Planned | |
 
 ## 7. Security controls (Phase 1)
 
