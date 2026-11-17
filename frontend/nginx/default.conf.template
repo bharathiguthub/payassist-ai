@@ -1,0 +1,36 @@
+# Rendered at container start by the nginx image's envsubst step. Only variables that exist in
+# the environment (KEYCLOAK_PUBLIC_URL, BACKEND_UPSTREAM) are replaced; nginx's own $variables are untouched.
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+    root /usr/share/nginx/html;
+
+    # Security headers. Locations below avoid add_header so these are inherited everywhere.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    # form-action must allow Keycloak because the logout form POST redirects to its end-session endpoint.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self' ${KEYCLOAK_PUBLIC_URL}" always;
+
+    # Backend-for-Frontend paths: API, OAuth2 login/callback, logout, health.
+    location ~ ^/(api|oauth2|login/oauth2|logout|actuator)(/|$) {
+        proxy_pass ${BACKEND_UPSTREAM};
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    # Hashed build assets can be cached forever.
+    location /assets/ {
+        expires 1y;
+    }
+
+    # SPA routes fall back to index.html, which must never be cached.
+    location / {
+        try_files $uri /index.html;
+        expires -1;
+    }
+}

@@ -1,0 +1,14 @@
+# Local development profile. NEVER enable in production: it loads synthetic seed data.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    com.payassist: DEBUG

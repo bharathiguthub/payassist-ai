@@ -1,0 +1,98 @@
+# PayAssist AI - Phase 1 local stack.
+# All secrets come from .env (copy .env.example or run scripts\new-dev-env.ps1). Compose refuses to
+# start if a required secret is missing (${VAR:?...}). Ports bind to 127.0.0.1 only.
+#
+#   Browser -> http://localhost:3000 (nginx: SPA + reverse proxy) -> backend:8080 (Spring BFF)
+#   Browser -> http://localhost:8180 (Keycloak login pages)
+#   backend -> keycloak:8080 (token/JWKS back channel), backend -> postgres:5432
+
+name: payassist
+
+services:
+  postgres:
+    # PostgreSQL 17 with the pgvector extension available (installed later by the RAG phase).
+    image: pgvector/pgvector:0.8.7-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-payassist}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"   # 5433 avoids clashing with a locally installed PostgreSQL
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    # start-dev: HTTP + embedded dev database. Development only; production uses 'start' with TLS
+    # and an external database. The realm (roles, client, synthetic users) is imported on first start.
+    command: ["start-dev", "--import-realm"]
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?Set KEYCLOAK_ADMIN_USERNAME in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
+      # Tokens always carry the browser-facing issuer; the backend may still call keycloak:8080.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      # Substituted into realm-payassist.json placeholders at import time.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Set KEYCLOAK_CLIENT_SECRET in .env}
+      PAYASSIST_DEMO_PASSWORD: ${PAYASSIST_DEMO_PASSWORD:?Set PAYASSIST_DEMO_PASSWORD in .env}
+    volumes:
+      - ./infra/keycloak/realm-payassist.json:/opt/keycloak/data/import/realm-payassist.json:ro
+    ports:
+      - "127.0.0.1:8180:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: dev          # dev = synthetic seed data + OpenAPI docs
+      PAYASSIST_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-payassist}
+      PAYASSIST_DB_USERNAME: ${POSTGRES_USER}
+      PAYASSIST_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      PAYASSIST_PUBLIC_BASE_URL: http://localhost:3000
+      PAYASSIST_COOKIE_SECURE: "false"     # plain HTTP on localhost; must be true behind TLS
+      KEYCLOAK_ISSUER_URI: http://localhost:8180/realms/payassist
+      KEYCLOAK_BACKCHANNEL_URI: http://keycloak:8080/realms/payassist
+      KEYCLOAK_CLIENT_ID: payassist-bff
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_PUBLIC_URL: http://localhost:8180
+      BACKEND_UPSTREAM: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:8080"
+
+volumes:
+  pgdata:

@@ -1,0 +1,13 @@
+# Test profile: synthetic values only. The datasource is provided by Testcontainers (@ServiceConnection).
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+
+payassist:
+  security:
+    public-base-url: http://localhost:3000
+    keycloak:
+      issuer-uri: http://localhost:8180/realms/payassist
+      backchannel-uri: http://keycloak:8080/realms/payassist
+      client-id: payassist-bff
+      client-secret: test-only-not-a-real-secret
