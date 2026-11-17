@@ -93,7 +93,7 @@ class PaymentLedgerService implements PaymentLedger {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public RefundPosition lockForRefund(String paymentRef) {
+    public RefundPosition lockForUpdate(String paymentRef) {
         String ref = paymentRef.toUpperCase();
         Payment payment = payments.findByPaymentRefForUpdate(ref)
                 .orElseThrow(() -> new ResourceNotFoundException(RESOURCE, ref));
@@ -140,7 +140,7 @@ class PaymentLedgerService implements PaymentLedger {
                 }
                 yield new PaymentTransitions.Context(comparison == 0, null);
             }
-            case DISPUTE_WON -> new PaymentTransitions.Context(false, statusBeforeDispute(payment));
+            case DISPUTE_WON, DISPUTE_WITHDRAWN -> new PaymentTransitions.Context(false, statusBeforeDispute(payment));
             default -> PaymentTransitions.Context.NONE;
         };
     }

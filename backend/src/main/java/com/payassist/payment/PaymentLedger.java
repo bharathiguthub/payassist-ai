@@ -23,9 +23,12 @@ public interface PaymentLedger {
 
     /**
      * Locks the payment row for the rest of the <em>caller's</em> transaction (one must be active) and returns
-     * the authoritative refund facts read under that lock. Every refund write path (request creation,
-     * approval, rejection) calls this first, so all of them are serialised per payment and lock rows in the
-     * same order (payment, then refund request), which rules out deadlocks between them.
+     * the authoritative facts (status, amount, recorded refunds) read under that lock.
+     *
+     * <p>Every write path that depends on a payment's money state calls this first: refund request creation,
+     * approval and rejection, and dispute case creation and transitions. All of them are therefore serialised
+     * per payment, and they lock rows in the same order: <b>payment, then refund request or dispute case</b>,
+     * which rules out deadlocks between them.
      */
-    PaymentHistory.RefundPosition lockForRefund(String paymentRef);
+    PaymentHistory.RefundPosition lockForUpdate(String paymentRef);
 }

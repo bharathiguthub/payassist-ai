@@ -47,6 +47,18 @@ public final class Roles {
      */
     public static final String DECIDE_REFUNDS = "hasRole('CARE_SUPERVISOR')";
 
+    /** Read dispute cases. ADMIN is granted this explicitly, read-only. */
+    public static final String READ_DISPUTES = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR','ADMIN')";
+
+    /** Case work: open cases, add notes and evidence, start investigation, request review. ADMIN excluded. */
+    public static final String WORK_DISPUTES = "hasAnyRole('CARE_AGENT','CARE_SUPERVISOR')";
+
+    /**
+     * Human-only supervisor decisions on disputes (approve submission, record outcome, accept liability, withdraw).
+     * Separation of duties is added by business rules. ADMIN excluded.
+     */
+    public static final String RESOLVE_DISPUTES = "hasRole('CARE_SUPERVISOR')";
+
     private Roles() {
     }
 }

@@ -189,6 +189,20 @@ class PaymentLedgerServiceTest {
     }
 
     @Test
+    void withdrawnDisputeRestoresThePreDisputeStatus() {
+        Payment payment = givenPayment(PaymentStatus.DISPUTED, PaymentMethod.CARD, "100.00");
+        when(events.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        PaymentEvent opened = new PaymentEvent(UUID.randomUUID(), payment.getId(), 3, PaymentEventType.DISPUTE_OPENED,
+                PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.DISPUTED, null, null, "OTHER", null, "agent.alice", null,
+                PaymentEventSource.PAYASSIST, NOW, NOW);
+        when(events.findFirstByPaymentIdAndEventTypeOrderBySequenceNoDesc(payment.getId(),
+                PaymentEventType.DISPUTE_OPENED)).thenReturn(Optional.of(opened));
+
+        assertThat(ledger.record(RecordPaymentEvent.of("PAY-000001", PaymentEventType.DISPUTE_WITHDRAWN,
+                AGENT, PaymentEventSource.PAYASSIST)).toStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+    }
+
+    @Test
     void wonDisputeOnMigratedPaymentWithoutHistoryFallsBackToSettled() {
         Payment payment = givenPayment(PaymentStatus.DISPUTED, PaymentMethod.CARD, "100.00");
         when(events.save(any())).thenAnswer(inv -> inv.getArgument(0));

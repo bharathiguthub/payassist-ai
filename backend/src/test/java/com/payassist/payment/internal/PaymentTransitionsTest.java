@@ -42,7 +42,8 @@ class PaymentTransitionsTest {
                     DISPUTE_OPENED, PaymentStatus.DISPUTED),
             PaymentStatus.PARTIALLY_REFUNDED, Map.of(REFUND_RECORDED, PaymentStatus.PARTIALLY_REFUNDED,
                     DISPUTE_OPENED, PaymentStatus.DISPUTED),
-            PaymentStatus.DISPUTED, Map.of(DISPUTE_WON, PaymentStatus.SETTLED, DISPUTE_LOST, PaymentStatus.CHARGED_BACK));
+            PaymentStatus.DISPUTED, Map.of(DISPUTE_WON, PaymentStatus.SETTLED, DISPUTE_LOST, PaymentStatus.CHARGED_BACK,
+                    PaymentEventType.DISPUTE_WITHDRAWN, PaymentStatus.SETTLED));
 
     static Stream<Arguments> everyLifecycleCombination() {
         List<Arguments> all = new ArrayList<>();

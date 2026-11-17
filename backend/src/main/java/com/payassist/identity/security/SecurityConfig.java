@@ -102,6 +102,18 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/refunds", "/api/v1/refunds/*")
                                 .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
                         .requestMatchers("/api/v1/refunds", "/api/v1/refunds/**").denyAll()
+                        // Dispute endpoints: every route listed deliberately; anything else under /disputes is denied.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/disputes", "/api/v1/disputes/*")
+                                .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/disputes", "/api/v1/disputes/*/notes",
+                                "/api/v1/disputes/*/evidence", "/api/v1/disputes/*/start-investigation",
+                                "/api/v1/disputes/*/request-review")
+                                .hasAnyRole(CARE_AGENT, CARE_SUPERVISOR)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/disputes/*/return-for-investigation",
+                                "/api/v1/disputes/*/approve-submission", "/api/v1/disputes/*/record-outcome",
+                                "/api/v1/disputes/*/accept-liability", "/api/v1/disputes/*/withdraw")
+                                .hasRole(CARE_SUPERVISOR)
+                        .requestMatchers("/api/v1/disputes", "/api/v1/disputes/**").denyAll()
                         .requestMatchers("/api/**").hasAnyRole(CARE_AGENT, CARE_SUPERVISOR, ADMIN)
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2

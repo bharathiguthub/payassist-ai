@@ -95,7 +95,7 @@ class InvestigationApiIT {
                 .andExpect(jsonPath("$.dispute.reasonCode").isNotEmpty())
                 .andExpect(jsonPath("$.findings[*].code").value(hasItem("DISPUTE_OPEN")))
                 .andExpect(jsonPath("$.possibleNextEvents").value(
-                        org.hamcrest.Matchers.containsInAnyOrder("DISPUTE_WON", "DISPUTE_LOST")));
+                        org.hamcrest.Matchers.containsInAnyOrder("DISPUTE_WON", "DISPUTE_LOST", "DISPUTE_WITHDRAWN")));
 
         String refunded = seedPayment("REFUNDED");
         mvc.perform(get("/api/v1/payments/" + refunded + "/investigation-summary").with(as("CARE_AGENT")))

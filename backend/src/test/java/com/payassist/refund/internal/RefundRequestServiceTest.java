@@ -108,7 +108,7 @@ class RefundRequestServiceTest {
     @Test
     void createsPendingRequestAfterRevalidatingUnderTheLock() {
         loginAs(ALICE, "CARE_AGENT");
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
 
         CreatedRefundRequest created = service.requestRefund(command("25", "key-00000001"));
 
@@ -131,7 +131,7 @@ class RefundRequestServiceTest {
     @Test
     void aboveTheSupervisorLimitTheRequestNeedsEscalation() {
         loginAs(ALICE, "CARE_AGENT");
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "5000.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "5000.00"));
 
         RefundRequestView view = service.requestRefund(command("1000.01", "key-00000002")).request();
 
@@ -144,7 +144,7 @@ class RefundRequestServiceTest {
     @Test
     void ineligibleRequestIsRefusedWithReasonCodesAndAuditedAsFailed() {
         loginAs(ALICE, "CARE_AGENT");
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.DISPUTED, false, "100.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.DISPUTED, false, "100.00"));
 
         assertThatThrownBy(() -> service.requestRefund(command("10.00", "key-00000003")))
                 .isInstanceOf(DomainException.RuleViolation.class)
@@ -166,7 +166,7 @@ class RefundRequestServiceTest {
     @Test
     void pendingReservationsReduceWhatCanBeRequested() {
         loginAs(ALICE, "CARE_AGENT");
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
         when(requests.sumAmount(eq(PAYMENT_ID), anyCollection())).thenReturn(new BigDecimal("80.00"));
 
         assertThatThrownBy(() -> service.requestRefund(command("20.01", "key-00000004")))
@@ -183,7 +183,7 @@ class RefundRequestServiceTest {
         loginAs(ALICE, "CARE_AGENT");
         RefundRequest original = request(ALICE, RefundRequestStatus.PENDING_APPROVAL, "25.00",
                 RefundRequestService.fingerprint("PAY-000001", new BigDecimal("25.00"), "GBP", RefundReason.CUSTOMER_REQUEST));
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
         when(requests.findByRequestedBySubjectAndIdempotencyKey("sub-alice", "key-00000006"))
                 .thenReturn(Optional.of(original));
 
@@ -200,7 +200,7 @@ class RefundRequestServiceTest {
     void sameKeyWithADifferentPayloadIsRefused() {
         loginAs(ALICE, "CARE_AGENT");
         RefundRequest original = request(ALICE, RefundRequestStatus.PENDING_APPROVAL, "25.00", "other-fingerprint");
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(PaymentStatus.SETTLED, true, "100.00"));
         when(requests.findByRequestedBySubjectAndIdempotencyKey("sub-alice", "key-00000007"))
                 .thenReturn(Optional.of(original));
 
@@ -224,7 +224,7 @@ class RefundRequestServiceTest {
         loginAs(ALICE, "CARE_AGENT");
         assertCode(() -> service.requestRefund(command("10.001", "key-00000008")), "INVALID_AMOUNT_SCALE");
         assertCode(() -> service.requestRefund(command("10.00", "short")), "IDEMPOTENCY_KEY_INVALID");
-        verify(ledger, never()).lockForRefund(any());
+        verify(ledger, never()).lockForUpdate(any());
     }
 
     // --- decisions --------------------------------------------------------------------------------
@@ -354,7 +354,7 @@ class RefundRequestServiceTest {
         when(requests.findPaymentRefByRefundRef(r.getRefundRef())).thenReturn(Optional.of("PAY-000001"));
         when(requests.findByRefundRefForUpdate(r.getRefundRef())).thenReturn(Optional.of(r));
         when(requests.findByRefundRef(r.getRefundRef())).thenReturn(Optional.of(r));
-        when(ledger.lockForRefund("PAY-000001")).thenReturn(position(paymentStatus, refundable, "5000.00"));
+        when(ledger.lockForUpdate("PAY-000001")).thenReturn(position(paymentStatus, refundable, "5000.00"));
         return r;
     }
 

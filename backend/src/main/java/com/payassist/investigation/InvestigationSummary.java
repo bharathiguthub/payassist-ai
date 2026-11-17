@@ -67,7 +67,8 @@ public record InvestigationSummary(
             BigDecimal notRefundedAmount, int refundCount) {
     }
 
-    public enum DisputeState { NONE, OPEN, WON, LOST }
+    /** OPEN is an investigation status: an open dispute does not mean the payment was reversed or charged back. */
+    public enum DisputeState { NONE, OPEN, WON, LOST, WITHDRAWN }
 
     public record DisputeFacts(DisputeState state, String reasonCode, String reasonDescription, Instant openedAt,
             Instant closedAt) {
@@ -100,6 +101,7 @@ public record InvestigationSummary(
         REFUNDS_RECORDED,
         DISPUTE_OPEN,
         DISPUTE_WON,
+        DISPUTE_WITHDRAWN,
         CHARGEBACK_RECORDED,
         HISTORY_INCOMPLETE,
         EVENTS_RECORDED_OUT_OF_ORDER,

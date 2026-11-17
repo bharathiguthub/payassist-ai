@@ -14,6 +14,10 @@ public enum PaymentStatus {
     VOIDED,
     PARTIALLY_REFUNDED,
     REFUNDED,
+    /**
+     * A dispute is under investigation. This is an investigation status only: it does NOT mean the payment has
+     * been reversed or charged back. Refunds are blocked while it lasts to avoid paying the customer twice.
+     */
     DISPUTED,
     /** Dispute lost: the funds were returned to the cardholder through the card network. */
     CHARGED_BACK;

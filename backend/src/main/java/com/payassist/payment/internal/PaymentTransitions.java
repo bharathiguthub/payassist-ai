@@ -30,7 +30,8 @@ import java.util.Set;
  *    └──FAILED──► FAILED ◄───┘  └──VOIDED──► VOIDED   │ REFUND_RECORDED   │  │ DISPUTE_WON (restores
  *                              (not BANK_TRANSFER)    ▼                   ▼  │  the pre-dispute status)
  *                                  PARTIALLY_REFUNDED / REFUNDED   DISPUTE_OPENED ──► DISPUTED
- *                                  (by cumulative refunded amount)                       │ DISPUTE_LOST
+ *                                  (by cumulative refunded amount)   (DISPUTE_WITHDRAWN │ DISPUTE_LOST
+ *                                                                     also restores)     │
  *                                                                                        ▼
  *                                                                                  CHARGED_BACK
  * </pre>
@@ -53,6 +54,7 @@ public final class PaymentTransitions {
         ALLOWED_FROM.put(PaymentEventType.DISPUTE_OPENED, EnumSet.of(SETTLED, PARTIALLY_REFUNDED));
         ALLOWED_FROM.put(PaymentEventType.DISPUTE_WON, EnumSet.of(DISPUTED));
         ALLOWED_FROM.put(PaymentEventType.DISPUTE_LOST, EnumSet.of(DISPUTED));
+        ALLOWED_FROM.put(PaymentEventType.DISPUTE_WITHDRAWN, EnumSet.of(DISPUTED));
     }
 
     private PaymentTransitions() {
@@ -94,6 +96,7 @@ public final class PaymentTransitions {
             case DISPUTE_OPENED -> DISPUTED;
             case DISPUTE_WON -> context.statusBeforeDispute() != null ? context.statusBeforeDispute() : SETTLED;
             case DISPUTE_LOST -> CHARGED_BACK;
+            case DISPUTE_WITHDRAWN -> context.statusBeforeDispute() != null ? context.statusBeforeDispute() : SETTLED;
             default -> current; // informational
         };
     }

@@ -28,6 +28,8 @@ public enum PaymentEventType {
     DISPUTE_OPENED(Kind.LIFECYCLE),
     DISPUTE_WON(Kind.LIFECYCLE),
     DISPUTE_LOST(Kind.LIFECYCLE),
+    /** The cardholder withdrew the dispute; the payment returns to its pre-dispute status. */
+    DISPUTE_WITHDRAWN(Kind.LIFECYCLE),
 
     REFUND_REQUESTED(Kind.INFORMATIONAL),
     REFUND_REJECTED(Kind.INFORMATIONAL),

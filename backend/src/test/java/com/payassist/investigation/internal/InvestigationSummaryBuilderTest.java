@@ -133,8 +133,20 @@ class InvestigationSummaryBuilderTest {
         assertThat(summary.dispute().state()).isEqualTo(DisputeState.OPEN);
         assertThat(summary.dispute().reasonCode()).isEqualTo("FRAUDULENT");
         Finding finding = only(summary, FindingCode.DISPUTE_OPEN);
-        assertThat(finding.message()).isEqualTo("A dispute is open since 2026-11-01T10:00:00Z with reason FRAUDULENT.");
+        assertThat(finding.message()).isEqualTo("A dispute is under investigation since 2026-11-01T10:00:00Z with reason "
+                + "FRAUDULENT. The payment has not been reversed or charged back; refunds are blocked meanwhile.");
         assertThat(finding.evidence()).containsExactly(5);
+    }
+
+    @Test
+    void withdrawnDisputeRestoresAndIsReported() {
+        InvestigationSummary summary = builder.build(timeline(PaymentStatus.SETTLED, null,
+                lifecycle(1, PaymentEventType.DISPUTE_OPENED, PaymentStatus.SETTLED, PaymentStatus.DISPUTED, 0),
+                lifecycle(2, PaymentEventType.DISPUTE_WITHDRAWN, PaymentStatus.DISPUTED, PaymentStatus.SETTLED, 30)), NOW);
+
+        assertThat(summary.dispute().state()).isEqualTo(DisputeState.WITHDRAWN);
+        assertThat(summary.dispute().closedAt()).isEqualTo(T0.plusSeconds(1800));
+        assertThat(only(summary, FindingCode.DISPUTE_WITHDRAWN).severity()).isEqualTo(Severity.INFO);
     }
 
     @Test

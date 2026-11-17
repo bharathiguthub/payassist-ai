@@ -62,7 +62,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Refund request workflow: creation (agents, supervisors), approval and rejection (supervisors), reads.
  *
  * <p><b>Transaction design.</b> Each write runs in one READ COMMITTED transaction that first takes the
- * payment row lock ({@link PaymentLedger#lockForRefund}) and then, for decisions, the refund request row lock.
+ * payment row lock ({@link PaymentLedger#lockForUpdate}) and then, for decisions, the refund request row lock.
  * The fixed lock order (payment, then request) prevents deadlocks; the payment lock serialises every refund
  * write for that payment, so reservations, re-validation and ledger writes see a stable state. READ COMMITTED
  * (not REPEATABLE READ) is deliberate: after waiting for the lock, each statement must see the rows the
@@ -144,7 +144,7 @@ class RefundRequestService implements RefundRequests, RefundApprovals {
 
     private CreatedRefundRequest create(Actor actor, String paymentRef, BigDecimal amount, String currency,
             RefundReason reason, String idempotencyKey, String fingerprint) {
-        RefundPosition position = ledger.lockForRefund(paymentRef);
+        RefundPosition position = ledger.lockForUpdate(paymentRef);
 
         // Checked under the payment lock: a concurrent retry with the same key waits here and then finds the
         // committed original instead of creating a duplicate.
@@ -310,7 +310,7 @@ class RefundRequestService implements RefundRequests, RefundApprovals {
     private Locked lock(String ref) {
         String paymentRef = requests.findPaymentRefByRefundRef(ref)
                 .orElseThrow(() -> new ResourceNotFoundException("Refund request", ref));
-        RefundPosition position = ledger.lockForRefund(paymentRef);
+        RefundPosition position = ledger.lockForUpdate(paymentRef);
         RefundRequest request = requests.findByRefundRefForUpdate(ref)
                 .orElseThrow(() -> new ResourceNotFoundException("Refund request", ref));
         return new Locked(request, position);

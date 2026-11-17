@@ -50,7 +50,8 @@ public final class InvestigationSummaryBuilder {
 
         Optional<TimelineEntry> disputeOpened = last(events, PaymentEventType.DISPUTE_OPENED);
         Optional<TimelineEntry> disputeClosed = last(events,
-                e -> (e.eventType() == PaymentEventType.DISPUTE_WON || e.eventType() == PaymentEventType.DISPUTE_LOST)
+                e -> (e.eventType() == PaymentEventType.DISPUTE_WON || e.eventType() == PaymentEventType.DISPUTE_LOST
+                        || e.eventType() == PaymentEventType.DISPUTE_WITHDRAWN)
                         && disputeOpened.map(o -> !e.occurredAt().isBefore(o.occurredAt())).orElse(true));
         DisputeFacts dispute = disputeFacts(p, disputeOpened, disputeClosed);
 
@@ -115,10 +116,14 @@ public final class InvestigationSummaryBuilder {
         List<Integer> disputeEvidence = disputeOpened.map(e -> List.of(e.sequenceNo())).orElse(statusEvidence);
         switch (dispute.state()) {
             case OPEN -> findings.add(new Finding(FindingCode.DISPUTE_OPEN, Severity.WARNING,
-                    "A dispute is open"
+                    "A dispute is under investigation"
                             + (dispute.openedAt() != null ? " since " + dispute.openedAt() : "")
-                            + (dispute.reasonCode() != null ? " with reason " + dispute.reasonCode() : "") + ".",
+                            + (dispute.reasonCode() != null ? " with reason " + dispute.reasonCode() : "")
+                            + ". The payment has not been reversed or charged back; refunds are blocked meanwhile.",
                     disputeEvidence));
+            case WITHDRAWN -> findings.add(new Finding(FindingCode.DISPUTE_WITHDRAWN, Severity.INFO,
+                    "The dispute was withdrawn on " + dispute.closedAt() + "; the payment status was restored.",
+                    statusEvidence));
             case WON -> findings.add(new Finding(FindingCode.DISPUTE_WON, Severity.INFO,
                     "The dispute was resolved in the merchant's favour on " + dispute.closedAt() + ".",
                     statusEvidence));
@@ -181,8 +186,11 @@ public final class InvestigationSummaryBuilder {
             return new DisputeFacts(DisputeState.OPEN, reason, reasonDescription, openedAt, null);
         }
         if (closed.isPresent()) {
-            DisputeState state = closed.get().eventType() == PaymentEventType.DISPUTE_WON
-                    ? DisputeState.WON : DisputeState.LOST;
+            DisputeState state = switch (closed.get().eventType()) {
+                case DISPUTE_WON -> DisputeState.WON;
+                case DISPUTE_WITHDRAWN -> DisputeState.WITHDRAWN;
+                default -> DisputeState.LOST;
+            };
             return new DisputeFacts(state, reason, reasonDescription, openedAt, closed.get().occurredAt());
         }
         if (p.status() == PaymentStatus.CHARGED_BACK) {

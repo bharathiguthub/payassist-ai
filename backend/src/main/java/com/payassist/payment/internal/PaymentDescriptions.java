@@ -21,7 +21,7 @@ public final class PaymentDescriptions {
             PaymentStatus.VOIDED, "Authorization released before capture; no funds were captured.",
             PaymentStatus.PARTIALLY_REFUNDED, "Part of the payment amount has been refunded.",
             PaymentStatus.REFUNDED, "The full payment amount has been refunded.",
-            PaymentStatus.DISPUTED, "A dispute (chargeback request) is open with the card network.",
+            PaymentStatus.DISPUTED, "A dispute is under investigation; the payment has not been reversed or charged back.",
             PaymentStatus.CHARGED_BACK, "Dispute lost; the funds were returned to the cardholder.");
 
     private static final Map<String, String> REASONS = Map.ofEntries(
@@ -66,6 +66,7 @@ public final class PaymentDescriptions {
             case DISPUTE_OPENED -> "Dispute opened" + (money != null ? " for " + money : "") + ".";
             case DISPUTE_WON -> "Dispute resolved in the merchant's favour; status restored to " + toStatus + ".";
             case DISPUTE_LOST -> "Dispute lost; funds returned to the cardholder.";
+            case DISPUTE_WITHDRAWN -> "Dispute withdrawn by the cardholder; status restored to " + toStatus + ".";
             case REFUND_REQUESTED -> "Refund" + (money != null ? " of " + money : "") + " requested; awaiting approval.";
             case REFUND_REJECTED -> "Refund request rejected.";
             case REFUND_CANCELLED -> "Refund request cancelled.";
