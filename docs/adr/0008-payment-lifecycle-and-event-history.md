@@ -31,6 +31,10 @@ trustworthy enough to show to supervisors, auditors and (later) AI agents.
   are easy to get wrong; a short row lock serialises writers for one payment only.
 - *Status enum with `canTransitionTo`*: harder to see and test as a whole than one table.
 
+## Amendment (Phase 2, M5)
+`DISPUTE_WITHDRAWN` (V6) restores the pre-dispute status like `DISPUTE_WON`. DISPUTED is an investigation status:
+it does not mean the payment was reversed or charged back; only `DISPUTE_LOST` (CHARGED_BACK) does. See ADR 0012.
+
 ## Consequences
 - History cannot be rewritten by application code or ordinary SQL. **Limitation:** the trigger can be disabled
   by the table owner, and today the application connects as the owner. Production hardening (later phase):

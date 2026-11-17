@@ -87,6 +87,11 @@ that fact to a payment service provider through a transactional outbox (later ph
 Re-importing (recreating the Keycloak container, which uses an embedded dev database) would otherwise give users
 new IDs, end all Keycloak sessions and discard console-only changes; PostgreSQL is unaffected.
 
+## Amendment (Phase 2, M5)
+`PaymentLedger.lockForRefund` became `lockForUpdate` and is shared with dispute writes: every refund or dispute
+write locks the payment row first, then the refund request or dispute case row. Pending refund requests keep their
+reservation while a dispute is active and cannot be approved until it is won or withdrawn (ADR 0012).
+
 ## Consequences
 - Refund writes for one payment are serialised (short transactions; contention is per payment only).
 - Above-limit requests can only be rejected until a REFUND_MANAGER role exists; their reservation persists until then.

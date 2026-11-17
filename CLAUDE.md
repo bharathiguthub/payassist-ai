@@ -63,7 +63,7 @@ and `@PreAuthorize(Roles.*)` on controller methods. Mapped roles live on the `Au
 on the `OidcUser` principal, so read authorities from `Authentication`. Note that
 `oidcLogin().authorities(...)` in tests sets both and hides this mistake.
 
-**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `investigation`, `refund`, `audit`, `shared` (OPEN).
+**Modular monolith** (`com.payassist.*`): `identity`, `customer`, `payment`, `investigation`, `refund`, `dispute`, `audit`, `shared` (OPEN).
 `ModularityTest` (Spring Modulith) fails the build if a module touches another module's sub-packages
 (`internal`, `web`, `security`) or creates a cycle. Cross-module access goes through top-level-package
 types (e.g. `CustomerDirectory`, `PaymentViewedEvent`). Entities hold IDs, not JPA relations, across modules.
@@ -96,6 +96,14 @@ once (`refund_decisions` is unique per request and append-only); `Idempotency-Ke
 Business authorization failures throw `DomainException.Forbidden` (403 + code). Refusals are audited in a
 separate transaction; role denials are audited via `AuthorizationDenialAuditor` (`ACCESS_DENIED`).
 
+**Disputes** (ADR 0012): `DisputeQueries` (read-only, tool-ready), `DisputeCaseWork`, `DisputeResolutions`
+(human-only, never a tool) in `dispute/internal/DisputeService`; state machine as data in `DisputeTransitions`.
+DISPUTED is an investigation status (nothing reversed); only outcomes change money state via the ledger
+(`DISPUTE_WON` / `DISPUTE_LOST` / `DISPUTE_WITHDRAWN`). Same lock order as refunds (`PaymentLedger.lockForUpdate`,
+then the case row); one active case per payment (partial unique index); `expectedVersion` required on transitions.
+Free text goes through `shared.TextGuard`; never put note text in audit details; render it as text only.
+PayAssist never computes dispute deadlines or encodes network reason-code schemes.
+
 **Data**: Flyway owns the schema (`ddl-auto=validate`). Add schema changes as new `db/migration/V<n>__*.sql`.
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`
 profile (`application-dev.yml`) and the `test` profile. Integration tests assert exact seed counts
@@ -116,9 +124,12 @@ deliberately deferred to the RAG phase.
 - Spring redirects unauthenticated *non-API* requests to login only when `Accept: text/html`; otherwise 401.
 - Never use `SecurityMockMvcRequestPostProcessors.csrf()` in `*IT` classes: it swaps the CSRF repository of the
   shared cached context and later tests lose the `XSRF-TOKEN` cookie. Use `support/RealCsrf.token(mvc)`.
-- Mutating refund ITs use the seed payments allocated in `support/RefundTestPayments` (guarded by `fresh()`)
+- Mutating refund/dispute ITs use the seed payments allocated in `support/RefundTestPayments` and
+  `support/DisputeTestPayments` (guarded by `fresh()`)
   and the personas in `support/TestUsers`; never pick payments other mutating tests select by position.
 - The running Keycloak uses an embedded dev DB (no volume): recreating the container re-imports the realm,
   ends sessions and drops console changes. The realm JSON pins user IDs so `sub` values survive a re-import.
+- Hibernate 6 Criteria queries cannot express NULLS FIRST/LAST (`Sort.Order.nullsLast()` throws); PostgreSQL already
+  sorts NULLs last in ascending order.
 - Integration tests run with a fixed clock (`FixedClockTestConfig`, 2026-11-16T12:00Z) because seed dates are
   absolute and refund windows/investigation thresholds are time-based.

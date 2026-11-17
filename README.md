@@ -8,7 +8,8 @@ with AI agents.
 > for payment investigation over **synthetic data only**. No AI features yet.
 > See [docs/architecture.md](docs/architecture.md) and the decision records in [docs/adr/](docs/adr/).
 > **Phase 2 in progress** (branch `feature/phase2-payment-domain`): payment lifecycle, timeline,
-> investigation summary, refund eligibility, and refund requests with supervisor approval are done (disputes are next).
+> investigation summary, refund eligibility, refund requests with supervisor approval, and dispute case management
+> are done.
 > No real money ever moves: approvals record simulated refunds. API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
 
 | Layer | Technology |
@@ -70,10 +71,10 @@ Select-String -Path .env -Pattern '^PAYASSIST_DEMO_PASSWORD'
 
 | Username | Role | What they can see |
 |---|---|---|
-| `agent.alice` | CARE_AGENT | Payment search and details, refund eligibility, refund requests |
-| `sam.supervisor` | CARE_SUPERVISOR | + Supervisor statistics, refund approval queue |
+| `agent.alice` | CARE_AGENT | Payment search and details, refund eligibility, refund requests, dispute cases |
+| `sam.supervisor` | CARE_SUPERVISOR | + Supervisor statistics, refund approvals, dispute review |
 | `tara.supervisor` | CARE_SUPERVISOR | Second supervisor (separation of duties: approves Sam's requests) |
-| `ada.admin` | ADMIN | + Audit log; refunds read-only (cannot request or approve) |
+| `ada.admin` | ADMIN | + Audit log; refunds and disputes read-only (no requests, approvals or decisions) |
 | `nora.norole` | (none) | "No access" page; every API returns 403 |
 
 Try searching for `PAY-0000` (payment reference prefix) or `CUS-00001` (customer reference), or

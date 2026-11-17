@@ -46,6 +46,9 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | `POST /refunds` | ✔ | ✔ | 403 | 403 |
 | `GET /refunds`, `GET /refunds/{ref}` | ✔ | ✔ | ✔ read-only | 403 |
 | `POST /refunds/{ref}/approve`, `/reject` | 403 | ✔ (not own) | 403 | 403 |
+| `GET /disputes`, `GET /disputes/{ref}` | ✔ | ✔ | ✔ read-only | 403 |
+| `POST /disputes`, `/notes`, `/evidence`, `/start-investigation`, `/request-review` | ✔ | ✔ | 403 | 403 |
+| `POST /disputes/{ref}/` decisions (approve submission, outcome, liability, withdraw, return) | 403 | ✔ (SoD) | 403 | 403 |
 | `GET /payments/stats` | 403 | ✔ | ✔ | 403 |
 | `GET /admin/audit-events` | 403 | 403 | ✔ | 403 |
 
@@ -291,3 +294,66 @@ duties, status, limit); it is a UI hint and every action is re-checked.
 **Audit**: `REFUND_REQUEST_CREATE`, `REFUND_REQUEST_VIEW`, `REFUND_REQUEST_APPROVE`, `REFUND_REQUEST_REJECT` with
 `outcome` `SUCCESS` / `DENIED` / `FAILED` and details (refs, amount, currency, status, codes; never personal data).
 Role-based denials of signed-in users are recorded as `ACCESS_DENIED` / `DENIED` with the method and path.
+
+### Dispute cases
+
+Design and rules: [ADR 0012](adr/0012-dispute-case-management.md). A dispute case is the investigation file for a
+bank / card-network / wallet-provider dispute. While a case is active the payment is **DISPUTED — an investigation
+status: nothing has been reversed or charged back** — and refunds are blocked. No money moves in PayAssist.
+
+| Method and path | Roles | Notes |
+|---|---|---|
+| `GET /disputes?status=&paymentRef=&overdue=&mine=&page=&size=` | all care roles (ADMIN read-only) | earliest response deadline first; `status` may repeat |
+| `GET /disputes/{caseRef}` | all care roles (ADMIN read-only) | case, history, notes, evidence, pending refunds, `allowedActions`; audited |
+| `POST /disputes` | CARE_AGENT, CARE_SUPERVISOR | `Idempotency-Key`; 201, or 200 + `Idempotent-Replayed: true` |
+| `POST /disputes/{caseRef}/notes` | CARE_AGENT, CARE_SUPERVISOR | `Idempotency-Key`; `{"body": "..."}` |
+| `POST /disputes/{caseRef}/evidence` | CARE_AGENT, CARE_SUPERVISOR | `Idempotency-Key`; `{"type", "documentReference", "description"?, "receivedAt"?}` |
+| `POST /disputes/{caseRef}/start-investigation`, `/request-review` | CARE_AGENT, CARE_SUPERVISOR | `{"expectedVersion": n}` |
+| `POST /disputes/{caseRef}/return-for-investigation` | CARE_SUPERVISOR | `{"reason", "expectedVersion"}` |
+| `POST /disputes/{caseRef}/approve-submission`, `/accept-liability` | CARE_SUPERVISOR | `{"expectedVersion"}` |
+| `POST /disputes/{caseRef}/record-outcome` | CARE_SUPERVISOR | `{"outcome": "WON" or "LOST", "expectedVersion"}` |
+| `POST /disputes/{caseRef}/withdraw` | CARE_SUPERVISOR | `{"reason", "expectedVersion"}` |
+
+Any other method or path under `/disputes` is denied (403).
+
+**Open** — body:
+
+```json
+{ "paymentRef": "PAY-000072", "reasonCategory": "PRODUCT_NOT_RECEIVED", "networkReasonCode": "13.1",
+  "responseDueAt": "2026-12-01T00:00:00Z" }
+```
+
+`reasonCategory` ∈ `FRAUDULENT`, `PRODUCT_NOT_RECEIVED`, `NOT_AS_DESCRIBED`, `DUPLICATE_CHARGE`, `CREDIT_NOT_PROCESSED`,
+`SUBSCRIPTION_CANCELLED`, `OTHER`. `networkReasonCode` and `responseDueAt` are optional and stored only as provided
+(PayAssist computes no deadlines). Optional `disputedAmount` + `currency` must equal the full unrefunded amount.
+
+Enumerations: evidence `type` ∈ `PROOF_OF_DELIVERY`, `CUSTOMER_COMMUNICATION`, `TRANSACTION_RECEIPT`,
+`TERMS_AND_POLICIES`, `SERVICE_USAGE_RECORD`, `REFUND_OR_CREDIT_RECORD`, `OTHER`; return `reason` ∈
+`INSUFFICIENT_EVIDENCE`, `NEEDS_CLARIFICATION`, `MISSING_DOCUMENTS`; withdrawal `reason` ∈ `CUSTOMER_WITHDREW`,
+`RESOLVED_WITH_CUSTOMER`, `RAISED_IN_ERROR`.
+
+**Case view** (abridged): `caseRef`, `paymentRef`, `reasonCategory`, `networkReasonCode`, `disputedAmount`, `currency`,
+`status`, `source` (`PAYASSIST` or `CARD_NETWORK`), `responseDueAt`, `overdue`, `openedBy`, `openedAt`,
+`reviewRequestedBy`, `history[]` (`eventType`, `fromStatus`, `toStatus`, `reasonCode`, `actor`, `correlationId`,
+`occurredAt`, `paymentLedgerUpdated`), `notes[]` (plain text — render as text only), `evidence[]`, `pendingRefunds[]`,
+`allowedActions[]` (for the current user), `version`.
+
+| HTTP | `code` | Meaning |
+|---|---|---|
+| 403 | `SELF_REVIEW_FORBIDDEN` | the review requester cannot approve the submission |
+| 403 | `SELF_LIABILITY_FORBIDDEN` | the case opener cannot accept liability |
+| 409 | `DISPUTE_ALREADY_OPEN` | the payment already has an active case |
+| 409 | `INVALID_STATE_TRANSITION` | not allowed from the case status, or the payment cannot be disputed (e.g. REFUNDED) |
+| 409 | `DISPUTE_CASE_CLOSED` | notes/evidence on a WON/LOST/WITHDRAWN case |
+| 409 | `CONCURRENT_MODIFICATION` | stale `expectedVersion` |
+| 422 | `EVIDENCE_REQUIRED` | review requested without evidence |
+| 422 | `DISPUTED_AMOUNT_MISMATCH` | stated amount is not the full unrefunded amount |
+| 422 | `CARD_NUMBER_DETECTED`, `EMAIL_ADDRESS_DETECTED`, `INVALID_CHARACTERS`, `TEXT_TOO_LONG` | note/description refused (text never echoed) |
+| 422 | `IDEMPOTENCY_KEY_REUSED` | same key, different payload |
+
+**Investigation summary** gains `disputeCase` (`caseRef`, `status`, `reasonCategory`, `openedAt`, `responseDueAt`,
+`overdue`) and findings `DISPUTE_RESPONSE_OVERDUE`, `DISPUTE_CASE_MISSING`, `DISPUTE_WITHDRAWN`; `dispute.state` may be
+`WITHDRAWN`.
+
+**Audit**: `DISPUTE_CASE_OPEN`, `DISPUTE_CASE_VIEW`, `DISPUTE_NOTE_ADD`, `DISPUTE_EVIDENCE_ADD`,
+`DISPUTE_CASE_TRANSITION`, with outcome, actor subject and correlation ID. Note text is never audited.

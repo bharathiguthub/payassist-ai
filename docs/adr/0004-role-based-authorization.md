@@ -27,6 +27,9 @@ Three personas: care executive, supervisor, platform administrator.
 | Read / list refund requests (Phase 2) | ✔ | ✔ | ✔ (explicit, read-only) |
 | Create refund requests (Phase 2) | ✔ | ✔ | |
 | Approve / reject refund requests (Phase 2; never own, within limit) | | ✔ | |
+| Read dispute cases (Phase 2) | ✔ | ✔ | ✔ (explicit, read-only) |
+| Open cases, add notes/evidence, start investigation, request review (Phase 2) | ✔ | ✔ | |
+| Dispute decisions: approve submission (not requester), outcome, accept liability (not opener), withdraw | | ✔ | |
 
 ## Consequences
 - Mapped roles live on the `Authentication`, not on the `OidcUser` principal. Code must read
