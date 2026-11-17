@@ -133,4 +133,5 @@ export const sampleSummary: InvestigationSummary = {
     },
   ],
   possibleNextEvents: ['REFUND_RECORDED', 'DISPUTE_OPENED'],
+  disputeCase: null,
 };

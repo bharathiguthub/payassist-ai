@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import { ApiError, apiFetch } from '../api/client';
 import type { InvestigationSummary } from '../api/types';
 import { formatAmount, formatDateTime, humanize } from '../format';
@@ -56,6 +57,13 @@ export function InvestigationSummaryCard({ paymentRef }: { paymentRef: string })
             <dd>
               {humanize(data.dispute.state)}
               {data.dispute.reasonCode ? ` (${data.dispute.reasonCode})` : ''}
+              {data.disputeCase && (
+                <>
+                  {' · case '}
+                  <Link to={`/disputes/${data.disputeCase.caseRef}`}>{data.disputeCase.caseRef}</Link>
+                  {` (${humanize(data.disputeCase.status)}${data.disputeCase.overdue ? ', overdue' : ''})`}
+                </>
+              )}
             </dd>
             <dt>History</dt>
             <dd>

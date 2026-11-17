@@ -106,6 +106,7 @@ export type PaymentEventType =
   | 'DISPUTE_OPENED'
   | 'DISPUTE_WON'
   | 'DISPUTE_LOST'
+  | 'DISPUTE_WITHDRAWN'
   | 'REFUND_REQUESTED'
   | 'REFUND_REJECTED'
   | 'REFUND_CANCELLED'
@@ -193,7 +194,8 @@ export interface InvestigationSummary {
     refundCount: number;
   };
   dispute: {
-    state: 'NONE' | 'OPEN' | 'WON' | 'LOST';
+    /** OPEN is an investigation status: nothing has been reversed or charged back. */
+    state: 'NONE' | 'OPEN' | 'WON' | 'LOST' | 'WITHDRAWN';
     reasonCode: string | null;
     reasonDescription: string | null;
     openedAt: string | null;
@@ -202,6 +204,15 @@ export interface InvestigationSummary {
   history: { eventCount: number; complete: boolean; recordedFrom: string | null };
   findings: Finding[];
   possibleNextEvents: PaymentEventType[];
+  /** The active dispute case, if any. */
+  disputeCase: {
+    caseRef: string;
+    status: DisputeStatus;
+    reasonCategory: DisputeReasonCategory;
+    openedAt: string;
+    responseDueAt: string | null;
+    overdue: boolean;
+  } | null;
 }
 
 // --- Phase 2: refund eligibility ------------------------------------------------------------------
@@ -307,4 +318,99 @@ export interface CreateRefundRequestBody {
   amount: string;
   currency: string;
   reason: RefundReason;
+}
+
+// --- Phase 2: dispute cases ------------------------------------------------------------------------
+
+export const DISPUTE_STATUSES = [
+  'OPEN',
+  'UNDER_INVESTIGATION',
+  'PENDING_REVIEW',
+  'EVIDENCE_SUBMITTED',
+  'WON',
+  'LOST',
+  'WITHDRAWN',
+] as const;
+export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
+
+export const DISPUTE_REASON_CATEGORIES = [
+  'FRAUDULENT',
+  'PRODUCT_NOT_RECEIVED',
+  'NOT_AS_DESCRIBED',
+  'DUPLICATE_CHARGE',
+  'CREDIT_NOT_PROCESSED',
+  'SUBSCRIPTION_CANCELLED',
+  'OTHER',
+] as const;
+export type DisputeReasonCategory = (typeof DISPUTE_REASON_CATEGORIES)[number];
+
+export const EVIDENCE_TYPES = [
+  'PROOF_OF_DELIVERY',
+  'CUSTOMER_COMMUNICATION',
+  'TRANSACTION_RECEIPT',
+  'TERMS_AND_POLICIES',
+  'SERVICE_USAGE_RECORD',
+  'REFUND_OR_CREDIT_RECORD',
+  'OTHER',
+] as const;
+export type EvidenceType = (typeof EVIDENCE_TYPES)[number];
+
+export const RETURN_REASONS = ['INSUFFICIENT_EVIDENCE', 'NEEDS_CLARIFICATION', 'MISSING_DOCUMENTS'] as const;
+export const WITHDRAWAL_REASONS = ['CUSTOMER_WITHDREW', 'RESOLVED_WITH_CUSTOMER', 'RAISED_IN_ERROR'] as const;
+
+export type DisputeAction =
+  | 'ADD_NOTE'
+  | 'ADD_EVIDENCE'
+  | 'START_INVESTIGATION'
+  | 'REQUEST_REVIEW'
+  | 'RETURN_FOR_INVESTIGATION'
+  | 'APPROVE_SUBMISSION'
+  | 'RECORD_OUTCOME'
+  | 'ACCEPT_LIABILITY'
+  | 'WITHDRAW';
+
+export interface DisputeSummary {
+  caseRef: string;
+  paymentRef: string;
+  reasonCategory: DisputeReasonCategory;
+  disputedAmount: number;
+  currency: string;
+  status: DisputeStatus;
+  source: 'PAYASSIST' | 'CARD_NETWORK';
+  /** As provided by the user from the bank/network notification; PayAssist never computes deadlines. */
+  responseDueAt: string | null;
+  overdue: boolean;
+  openedBy: string;
+  openedAt: string;
+  reviewRequestedBy: string | null;
+  version: number;
+}
+
+export interface DisputeView extends DisputeSummary {
+  schemaVersion: string;
+  networkReasonCode: string | null;
+  updatedAt: string;
+  history: {
+    sequenceNo: number;
+    eventType: string;
+    fromStatus: DisputeStatus | null;
+    toStatus: DisputeStatus | null;
+    reasonCode: string | null;
+    actor: string;
+    correlationId: string | null;
+    occurredAt: string;
+    paymentLedgerUpdated: boolean;
+  }[];
+  /** Plain text. Always render as text, never as HTML. */
+  notes: { body: string; author: string; createdAt: string }[];
+  evidence: {
+    type: EvidenceType;
+    documentReference: string;
+    description: string | null;
+    receivedAt: string | null;
+    addedBy: string;
+    addedAt: string;
+  }[];
+  pendingRefunds: { refundRef: string; amount: number; currency: string; status: string }[];
+  allowedActions: DisputeAction[];
 }

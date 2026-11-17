@@ -14,6 +14,10 @@ export function Layout({ user }: { user: CurrentUser }) {
           <NavLink to="/payments">Payments</NavLink>
           {hasAnyRole(user, ['CARE_SUPERVISOR', 'ADMIN']) && <NavLink to="/supervisor">Supervisor</NavLink>}
           {hasAnyRole(user, ['CARE_SUPERVISOR', 'ADMIN']) && <NavLink to="/refunds/approvals">Refund approvals</NavLink>}
+          <NavLink to="/disputes" end>
+            Disputes
+          </NavLink>
+          {hasAnyRole(user, ['CARE_SUPERVISOR', 'ADMIN']) && <NavLink to="/disputes/review">Dispute review</NavLink>}
           {hasAnyRole(user, ['ADMIN']) && <NavLink to="/admin/audit">Audit log</NavLink>}
         </nav>
         <div className="user">

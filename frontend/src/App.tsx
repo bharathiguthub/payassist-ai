@@ -8,6 +8,8 @@ import { NoAccessPage } from './pages/NoAccessPage';
 import { PaymentDetailPage } from './pages/PaymentDetailPage';
 import { PaymentSearchPage } from './pages/PaymentSearchPage';
 import { RefundApprovalsPage } from './pages/RefundApprovalsPage';
+import { DisputeCasePage } from './pages/DisputeCasePage';
+import { DisputeReviewPage, DisputesPage } from './pages/DisputesPage';
 import { SupervisorPage } from './pages/SupervisorPage';
 
 export function App() {
@@ -39,6 +41,16 @@ export function App() {
             </RequireRole>
           }
         />
+        <Route path="disputes" element={<DisputesPage />} />
+        <Route
+          path="disputes/review"
+          element={
+            <RequireRole roles={['CARE_SUPERVISOR', 'ADMIN']}>
+              <DisputeReviewPage />
+            </RequireRole>
+          }
+        />
+        <Route path="disputes/:caseRef" element={<DisputeCasePage />} />
         <Route
           path="refunds/approvals"
           element={

@@ -50,6 +50,24 @@ describe('App authentication and role-based navigation', () => {
     expect(await screen.findByRole('link', { name: 'Refund approvals' })).toHaveAttribute('href', '/refunds/approvals');
   });
 
+  it('gives every care role the dispute list but only supervisors and admins the review queue', async () => {
+    loggedInAs(['CARE_AGENT']);
+    const { unmount } = renderWithProviders(<App />);
+    expect(await screen.findByRole('link', { name: 'Disputes' })).toHaveAttribute('href', '/disputes');
+    expect(screen.queryByRole('link', { name: 'Dispute review' })).not.toBeInTheDocument();
+    unmount();
+
+    loggedInAs(['CARE_SUPERVISOR']);
+    renderWithProviders(<App />);
+    expect(await screen.findByRole('link', { name: 'Dispute review' })).toHaveAttribute('href', '/disputes/review');
+  });
+
+  it('blocks a care agent who navigates directly to the dispute review queue', async () => {
+    loggedInAs(['CARE_AGENT']);
+    renderWithProviders(<App />, { route: '/disputes/review' });
+    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
+  });
+
   it('blocks a care agent who navigates directly to the approval queue', async () => {
     loggedInAs(['CARE_AGENT']);
     renderWithProviders(<App />, { route: '/refunds/approvals' });

@@ -111,6 +111,7 @@ describe('PaymentDetailPage investigation', () => {
     loggedInAs(['CARE_AGENT']);
     const { unmount } = renderDetail();
     expect(await screen.findByRole('heading', { name: 'Request a refund' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Open a dispute case' })).toBeInTheDocument();
     expect(await screen.findByText('No refund requests for this payment.')).toBeInTheDocument();
     unmount();
 
@@ -118,5 +119,6 @@ describe('PaymentDetailPage investigation', () => {
     renderDetail();
     expect(await screen.findByRole('heading', { name: 'Refund requests' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Request a refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Open a dispute case' })).not.toBeInTheDocument();
   });
 });
