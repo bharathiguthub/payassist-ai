@@ -275,6 +275,15 @@ class DisputeWorkflowIT {
         open(ALICE, openBody(failed, "OTHER"), key()).andExpect(status().isConflict());
         assertThat(jdbc.queryForObject("select count(*) from dispute_cases where payment_ref in (?, ?)", Long.class,
                 refunded, failed)).isZero();
+
+        // A seeded DISPUTED payment already has its (backfilled) card-network case.
+        String disputed = jdbc.queryForObject("select min(payment_ref) from payments where status = 'DISPUTED'",
+                String.class);
+        open(ALICE, openBody(disputed, "OTHER"), key()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DISPUTE_ALREADY_OPEN"));
+        mvc.perform(get("/api/v1/payments/" + disputed + "/investigation-summary").with(ALICE.mvc()))
+                .andExpect(jsonPath("$.disputeCase.status").value("OPEN"))
+                .andExpect(jsonPath("$.findings[*].code").value(not(hasItem("DISPUTE_CASE_MISSING"))));
     }
 
     // --- helpers ---------------------------------------------------------------------------------

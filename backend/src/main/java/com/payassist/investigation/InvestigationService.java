@@ -1,5 +1,6 @@
 package com.payassist.investigation;
 
+import com.payassist.dispute.DisputeQueries;
 import com.payassist.identity.CurrentActor;
 import com.payassist.identity.Roles;
 import com.payassist.investigation.internal.InvestigationSummaryBuilder;
@@ -26,13 +27,15 @@ public class InvestigationService {
     static final String RESOURCE_PAYMENT = "PAYMENT";
 
     private final PaymentHistory history;
+    private final DisputeQueries disputes;
     private final InvestigationSummaryBuilder builder;
     private final ApplicationEventPublisher publisher;
     private final Clock clock;
 
-    InvestigationService(PaymentHistory history, InvestigationSummaryBuilder builder,
+    InvestigationService(PaymentHistory history, DisputeQueries disputes, InvestigationSummaryBuilder builder,
             ApplicationEventPublisher publisher, Clock clock) {
         this.history = history;
+        this.disputes = disputes;
         this.builder = builder;
         this.publisher = publisher;
         this.clock = clock;
@@ -46,7 +49,11 @@ public class InvestigationService {
     @Transactional
     public InvestigationSummary summarize(String paymentRef) {
         PaymentTimeline timeline = history.timeline(paymentRef);
-        InvestigationSummary summary = builder.build(timeline, Instant.now(clock));
+        InvestigationSummary.DisputeCaseFacts disputeCase = disputes.activeDisputeFor(timeline.payment().paymentRef())
+                .map(d -> new InvestigationSummary.DisputeCaseFacts(d.caseRef(), d.status().name(),
+                        d.reasonCategory().name(), d.openedAt(), d.responseDueAt(), d.overdue()))
+                .orElse(null);
+        InvestigationSummary summary = builder.build(timeline, disputeCase, Instant.now(clock));
         publisher.publishEvent(AuditRecord.of(clock, CurrentActor.require(), ACTION_VIEW_SUMMARY, RESOURCE_PAYMENT,
                 summary.paymentRef()));
         return summary;

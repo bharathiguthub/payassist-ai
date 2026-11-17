@@ -58,6 +58,25 @@ class DatabaseIT {
     }
 
     @Test
+    void seedBackfillsOneCardNetworkCasePerSyntheticDisputedPayment() {
+        assertThat(jdbc.queryForObject("select count(*) from payments where status = 'DISPUTED'", Long.class))
+                .isEqualTo(33);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from dispute_cases c join payments p on p.id = c.payment_id
+                where c.source = 'CARD_NETWORK' and c.status = 'OPEN' and p.status = 'DISPUTED'
+                  and c.response_due_at is null and c.opened_by_subject is null
+                  and c.disputed_amount = p.amount""", Long.class)).isEqualTo(33);
+        // Each case's OPENED history entry points at the payment's existing DISPUTE_OPENED ledger event.
+        assertThat(jdbc.queryForObject("""
+                select count(*) from dispute_case_events h join dispute_cases c on c.id = h.case_id
+                join payment_events e on e.id = h.ledger_event_id
+                where h.event_type = 'OPENED' and e.event_type = 'DISPUTE_OPENED' and e.payment_id = c.payment_id""",
+                Long.class)).isEqualTo(33);
+        assertThat(jdbc.queryForObject("select count(*) from payment_events where event_type = 'DISPUTE_OPENED'",
+                Long.class)).isEqualTo(33);
+    }
+
+    @Test
     void pgvectorExtensionIsAvailableForTheRagPhaseButNotYetInstalled() {
         assertThat(jdbc.queryForObject(
                 "select count(*) from pg_available_extensions where name = 'vector'", Long.class)).isEqualTo(1);

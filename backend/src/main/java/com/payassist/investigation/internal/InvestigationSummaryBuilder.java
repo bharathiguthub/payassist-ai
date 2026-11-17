@@ -39,6 +39,12 @@ public final class InvestigationSummaryBuilder {
     }
 
     public InvestigationSummary build(PaymentTimeline timeline, Instant now) {
+        return build(timeline, null, now);
+    }
+
+    /** @param disputeCase the active dispute case, or {@code null} if there is none */
+    public InvestigationSummary build(PaymentTimeline timeline, InvestigationSummary.DisputeCaseFacts disputeCase,
+            Instant now) {
         PaymentSnapshot p = timeline.payment();
         List<TimelineEntry> events = timeline.events(); // chronological
 
@@ -71,10 +77,12 @@ public final class InvestigationSummaryBuilder {
                 p.createdAt(), p.updatedAt(), p.customer());
 
         List<Finding> findings = findings(p, events, money, dispute, disputeOpened, now);
+        findings.addAll(disputeCaseFindings(p, disputeCase));
+        findings.sort(Comparator.comparing(Finding::severity).thenComparing(Finding::code));
 
         return new InvestigationSummary(InvestigationSummary.SCHEMA_VERSION, p.paymentRef(), now, p.version(),
-                InvestigationSummary.BASIS, facts, milestones, money, dispute, history, findings,
-                p.nextLifecycleEvents());
+                InvestigationSummary.BASIS, facts, milestones, money, dispute, history, List.copyOf(findings),
+                p.nextLifecycleEvents(), disputeCase);
     }
 
     private List<Finding> findings(PaymentSnapshot p, List<TimelineEntry> events, MoneyFacts money,
@@ -162,8 +170,22 @@ public final class InvestigationSummaryBuilder {
                     statusEvidence));
         }
 
-        findings.sort(Comparator.comparing(Finding::severity).thenComparing(Finding::code));
-        return List.copyOf(findings);
+        return findings;
+    }
+
+    private static List<Finding> disputeCaseFindings(PaymentSnapshot p, InvestigationSummary.DisputeCaseFacts c) {
+        List<Finding> result = new ArrayList<>();
+        if (c != null && c.overdue()) {
+            result.add(new Finding(FindingCode.DISPUTE_RESPONSE_OVERDUE, Severity.WARNING, "Dispute case " + c.caseRef()
+                    + " is past its response due date (" + c.responseDueAt() + ", as provided) and is still "
+                    + c.status() + ".", List.of()));
+        }
+        if (c == null && p.status() == PaymentStatus.DISPUTED) {
+            result.add(new Finding(FindingCode.DISPUTE_CASE_MISSING, Severity.INFO,
+                    "The payment is DISPUTED but no dispute case is open in PayAssist; open one to track the investigation.",
+                    List.of()));
+        }
+        return result;
     }
 
     private static void ageFinding(List<Finding> findings, FindingCode code, String state, Instant since,

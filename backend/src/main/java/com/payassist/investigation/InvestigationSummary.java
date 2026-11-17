@@ -29,7 +29,8 @@ public record InvestigationSummary(
         DisputeFacts dispute,
         HistoryCoverage history,
         List<Finding> findings,
-        Set<PaymentEventType> possibleNextEvents) {
+        Set<PaymentEventType> possibleNextEvents,
+        DisputeCaseFacts disputeCase) {
 
     public static final String SCHEMA_VERSION = "1.0";
     public static final String BASIS =
@@ -81,6 +82,15 @@ public record InvestigationSummary(
     public record HistoryCoverage(int eventCount, boolean complete, Instant recordedFrom) {
     }
 
+    /**
+     * The active PayAssist dispute case for the payment, if any (added in schema 1.0 as an optional field).
+     *
+     * @param responseDueAt as provided by the user from the bank/network notification; PayAssist computes none
+     */
+    public record DisputeCaseFacts(String caseRef, String status, String reasonCategory, Instant openedAt,
+            Instant responseDueAt, boolean overdue) {
+    }
+
     public enum Severity { WARNING, INFO }
 
     /**
@@ -102,6 +112,8 @@ public record InvestigationSummary(
         DISPUTE_OPEN,
         DISPUTE_WON,
         DISPUTE_WITHDRAWN,
+        DISPUTE_RESPONSE_OVERDUE,
+        DISPUTE_CASE_MISSING,
         CHARGEBACK_RECORDED,
         HISTORY_INCOMPLETE,
         EVENTS_RECORDED_OUT_OF_ORDER,

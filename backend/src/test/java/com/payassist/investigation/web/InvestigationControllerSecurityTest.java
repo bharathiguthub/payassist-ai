@@ -99,7 +99,7 @@ class InvestigationControllerSecurityTest {
                 new Milestones(at, at, at, at, null, null, null, null, null),
                 new MoneyFacts("GBP", amount, new BigDecimal("0.00"), amount, 0),
                 new DisputeFacts(DisputeState.NONE, null, null, null, null),
-                new HistoryCoverage(4, true, at), List.of(), Set.of());
+                new HistoryCoverage(4, true, at), List.of(), Set.of(), null);
     }
 
     private static RequestPostProcessor as(String role) {

@@ -150,6 +150,31 @@ class InvestigationSummaryBuilderTest {
     }
 
     @Test
+    void activeDisputeCaseFactsAreIncludedAndAnOverdueDeadlineIsAWarning() {
+        var opened = lifecycle(1, PaymentEventType.DISPUTE_OPENED, PaymentStatus.SETTLED, PaymentStatus.DISPUTED, 0);
+        var onTime = new InvestigationSummary.DisputeCaseFacts("DSP-0123456789AB", "UNDER_INVESTIGATION",
+                "FRAUDULENT", T0, NOW.plusSeconds(3600), false);
+        InvestigationSummary summary = builder.build(timeline(PaymentStatus.DISPUTED, null, opened), onTime, NOW);
+        assertThat(summary.disputeCase()).isEqualTo(onTime);
+        assertThat(summary.findings()).extracting(Finding::code).containsExactly(FindingCode.DISPUTE_OPEN);
+
+        var late = new InvestigationSummary.DisputeCaseFacts("DSP-0123456789AB", "UNDER_INVESTIGATION",
+                "FRAUDULENT", T0, NOW.minusSeconds(60), true);
+        Finding overdue = only(builder.build(timeline(PaymentStatus.DISPUTED, null, opened), late, NOW),
+                FindingCode.DISPUTE_RESPONSE_OVERDUE);
+        assertThat(overdue.severity()).isEqualTo(Severity.WARNING);
+        assertThat(overdue.message()).contains("DSP-0123456789AB").contains("as provided");
+    }
+
+    @Test
+    void disputedPaymentWithoutACaseIsReported() {
+        var opened = lifecycle(1, PaymentEventType.DISPUTE_OPENED, PaymentStatus.SETTLED, PaymentStatus.DISPUTED, 0);
+        InvestigationSummary summary = builder.build(timeline(PaymentStatus.DISPUTED, null, opened), null, NOW);
+        assertThat(summary.disputeCase()).isNull();
+        assertThat(only(summary, FindingCode.DISPUTE_CASE_MISSING).severity()).isEqualTo(Severity.INFO);
+    }
+
+    @Test
     void lostDisputeIsAChargebackFinding() {
         InvestigationSummary summary = builder.build(timeline(PaymentStatus.CHARGED_BACK, null,
                 lifecycle(1, PaymentEventType.DISPUTE_OPENED, PaymentStatus.SETTLED, PaymentStatus.DISPUTED, 0),

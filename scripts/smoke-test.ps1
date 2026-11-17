@@ -206,7 +206,53 @@ if ($candidate) {
     Check 'refund actions and denials are in the audit log' ($audit -match 'REFUND_REQUEST_CREATE' -and $audit -match 'REFUND_REQUEST_REJECT' -and $audit -match '"outcome":"DENIED"')
 }
 
-Write-Host "`n[8] CSRF and logout (agent.alice)"
+Write-Host "`n[8] Dispute cases (no money moves; both cases end with the payment restored)"
+function Version($response) { return ((Body $response) | ConvertFrom-Json).version }
+function DisputeAction($session, [string]$ref, [string]$action, [string]$json) { return PostJson $session "/api/v1/disputes/$ref/$action" $json }
+$oldest = (Body (Send $alice.Session 'GET' "$BaseUrl/api/v1/payments?status=SETTLED&size=100" $null @{ Accept = 'application/json' })) | ConvertFrom-Json
+$paymentA = $oldest.content[-1].paymentRef
+$paymentB = $oldest.content[-2].paymentRef
+Check 'found two SETTLED payments for dispute checks' ($paymentA -and $paymentB)
+
+# Case A: agent opens and works the case; another supervisor approves the evidence; a third person records WON.
+$openA = PostJson $alice.Session '/api/v1/disputes' ('{"paymentRef":"' + $paymentA + '","reasonCategory":"PRODUCT_NOT_RECEIVED"}') $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) }
+$caseA = (Body $openA) | ConvertFrom-Json
+Check 'agent opens a dispute case (201, OPEN)' ([int]$openA.StatusCode -eq 201 -and $caseA.status -eq 'OPEN')
+$elig = (Body (PostJson $alice.Session '/api/v1/refunds/eligibility-check' ('{"paymentRef":"' + $paymentA + '"}'))) | ConvertFrom-Json
+Check 'refunds are blocked while the dispute is active (PAYMENT_DISPUTED)' ($elig.reasons.code -contains 'PAYMENT_DISPUTED')
+$refA = $caseA.caseRef
+$v = Version (DisputeAction $alice.Session $refA 'start-investigation' '{"expectedVersion":0}')
+$ev = PostJson $alice.Session "/api/v1/disputes/$refA/evidence" '{"type":"PROOF_OF_DELIVERY","documentReference":"SMOKE-DOC-1"}' $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) }
+$noteBlocked = PostJson $alice.Session "/api/v1/disputes/$refA/notes" '{"body":"card 4111 1111 1111 1111"}' $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) }
+Check 'notes containing a card number are rejected (422 CARD_NUMBER_DETECTED)' ([int]$noteBlocked.StatusCode -eq 422 -and (Body $noteBlocked) -match 'CARD_NUMBER_DETECTED')
+$v = Version (PostJson $alice.Session "/api/v1/disputes/$refA/notes" '{"body":"Smoke test note."}' $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) })
+$review = DisputeAction $alice.Session $refA 'request-review' ('{"expectedVersion":' + $v + '}')
+Check 'agent adds evidence and requests supervisor review' ([int]$ev.StatusCode -eq 200 -and [int]$review.StatusCode -eq 200)
+$v = Version $review
+Check 'agent cannot approve the evidence submission (403)' ([int](DisputeAction $alice.Session $refA 'approve-submission' ('{"expectedVersion":' + $v + '}')).StatusCode -eq 403)
+Check 'admin cannot approve the evidence submission (403)' ([int](DisputeAction $ada.Session $refA 'approve-submission' ('{"expectedVersion":' + $v + '}')).StatusCode -eq 403)
+Check 'admin can read the case (read-only)' ((Status $ada.Session "/api/v1/disputes/$refA") -eq 200)
+$approved = DisputeAction $sam.Session $refA 'approve-submission' ('{"expectedVersion":' + $v + '}')
+Check 'supervisor sam approves the submission' ([int]$approved.StatusCode -eq 200)
+$won = DisputeAction $tara.Session $refA 'record-outcome' ('{"outcome":"WON","expectedVersion":' + (Version $approved) + '}')
+Check 'supervisor tara records WON' ([int]$won.StatusCode -eq 200 -and (Body $won) -match '"status":"WON"')
+$paymentAfter = (Body (Send $alice.Session 'GET' "$BaseUrl/api/v1/payments/$paymentA" $null @{ Accept = 'application/json' })) | ConvertFrom-Json
+Check 'payment is restored to SETTLED after the won dispute' ($paymentAfter.status -eq 'SETTLED')
+
+# Case B: separation of duties on the review, then withdrawal restores the payment.
+$caseB = (Body (PostJson $sam.Session '/api/v1/disputes' ('{"paymentRef":"' + $paymentB + '","reasonCategory":"DUPLICATE_CHARGE"}') $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) })) | ConvertFrom-Json
+$refB = $caseB.caseRef
+$v = Version (DisputeAction $sam.Session $refB 'start-investigation' '{"expectedVersion":0}')
+$v = Version (PostJson $sam.Session "/api/v1/disputes/$refB/evidence" '{"type":"TRANSACTION_RECEIPT","documentReference":"SMOKE-DOC-2"}' $true @{ 'Idempotency-Key' = ('smoke-' + [guid]::NewGuid()) })
+$v = Version (DisputeAction $sam.Session $refB 'request-review' ('{"expectedVersion":' + $v + '}'))
+$selfReview = DisputeAction $sam.Session $refB 'approve-submission' ('{"expectedVersion":' + $v + '}')
+Check 'supervisor cannot approve a review they requested (403 SELF_REVIEW_FORBIDDEN)' ([int]$selfReview.StatusCode -eq 403 -and (Body $selfReview) -match 'SELF_REVIEW_FORBIDDEN')
+$withdrawn = DisputeAction $tara.Session $refB 'withdraw' ('{"reason":"RAISED_IN_ERROR","expectedVersion":' + $v + '}')
+Check 'tara records the withdrawal; payment restored' ([int]$withdrawn.StatusCode -eq 200 -and (Body $withdrawn) -match '"status":"WITHDRAWN"')
+$audit = Body (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events?size=60" $null @{ Accept = 'application/json' })
+Check 'dispute actions and denials are in the audit log' ($audit -match 'DISPUTE_CASE_OPEN' -and $audit -match 'DISPUTE_CASE_TRANSITION' -and $audit -match 'SELF_REVIEW_FORBIDDEN')
+
+Write-Host "`n[9] CSRF and logout (agent.alice)"
 $csrf = ($alice.Session.Cookies.GetCookies([Uri]$BaseUrl) | Where-Object Name -eq 'XSRF-TOKEN').Value
 Check 'XSRF-TOKEN cookie present' ([bool]$csrf)
 Check 'logout without CSRF token is rejected (403)' ([int](Send $alice.Session 'POST' "$BaseUrl/logout").StatusCode -eq 403)
