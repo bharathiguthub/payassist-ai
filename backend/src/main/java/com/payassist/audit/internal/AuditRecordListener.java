@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 /**
  * Persists {@link AuditRecord}s published by any module. Synchronous and inside the publisher's
  * transaction: if the audit row cannot be written, the audited operation fails too (fail closed).
+ * Records are checked against {@link AuditDetailPolicy} first; the database chains each row (ADR 0013).
  */
 @Component
 class AuditRecordListener {
@@ -19,8 +20,9 @@ class AuditRecordListener {
 
     @EventListener
     void on(AuditRecord record) {
+        AuditDetailPolicy.check(record);
         auditEvents.save(new AuditEvent(record.occurredAt(), record.actor().username(), record.actor().subject(),
-                record.action(), record.resourceType(), record.resourceId(), record.correlationId(), record.details(),
-                record.outcome().name()));
+                record.actorType().name(), record.action(), record.resourceType(), record.resourceId(),
+                record.correlationId(), record.details(), record.outcome().name()));
     }
 }

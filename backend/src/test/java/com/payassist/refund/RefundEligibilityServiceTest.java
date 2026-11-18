@@ -61,7 +61,7 @@ class RefundEligibilityServiceTest {
         }
         var policy = new RefundPolicy("UNIT-v1", Set.of("GBP"), methods, Map.of("GBP", new BigDecimal("1000")));
         service = new RefundEligibilityService(payments, reservations, new RefundEligibilityEngine(policy), publisher,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), new NoOpTransactionManager());
         SecurityContextHolder.getContext().setAuthentication(
                 new TestingAuthenticationToken("agent.alice", "n/a", "ROLE_CARE_AGENT"));
     }
@@ -131,5 +131,30 @@ class RefundEligibilityServiceTest {
     private static void assertCode(Runnable call, String code) {
         assertThatThrownBy(call::run).isInstanceOf(DomainException.RuleViolation.class)
                 .extracting(e -> ((DomainException) e).getCode()).isEqualTo(code);
+    }
+
+    /** Runs transaction callbacks without a database. */
+    static final class NoOpTransactionManager
+            extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {
+            // nothing to begin
+        }
+
+        @Override
+        protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {
+            // nothing to commit
+        }
+
+        @Override
+        protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {
+            // nothing to roll back
+        }
     }
 }

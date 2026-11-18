@@ -92,7 +92,7 @@ class PaymentApiIT {
     void adminSeesAuditTrail() throws Exception {
         mvc.perform(get("/api/v1/payments/PAY-000007").with(agent())).andExpect(status().isOk());
 
-        mvc.perform(get("/api/v1/admin/audit-events")
+        mvc.perform(get("/api/v1/admin/audit-events").param("resourceId", "PAY-000007")
                         .with(oidcLogin().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].action").value("VIEW"))

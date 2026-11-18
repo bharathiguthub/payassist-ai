@@ -78,6 +78,24 @@ export interface AuditEvent {
   action: string;
   resourceType: string;
   resourceId: string;
+  actorType: 'USER' | 'SYSTEM' | 'AGENT' | null;
+  correlationId: string | null;
+  outcome: 'SUCCESS' | 'DENIED' | 'FAILED';
+  details: Record<string, string>;
+  /** CHAINED rows are covered by the hash chain; LEGACY rows predate it (pinned by the genesis anchor). */
+  protection: 'CHAINED' | 'LEGACY';
+  chainSeq: number | null;
+  rowHash: string | null;
+}
+
+export interface AuditIntegrityReport {
+  result: 'VALID' | 'BROKEN';
+  checkedAt: string;
+  legacyRows: number;
+  chainedRows: number;
+  headChainSeq: number | null;
+  headRowHash: string | null;
+  firstFailure: { auditEventId: number | null; chainSeq: number | null; reason: string } | null;
 }
 
 /** RFC 9457 Problem Details returned by the backend on errors. */

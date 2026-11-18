@@ -203,7 +203,7 @@ class RefundEligibilityApiIT {
         assertThat(details.get("reasonCodes").asText()).isEqualTo("WITHIN_POLICY");
         assertThat((String) row.get("details")).doesNotContain("@").doesNotContainIgnoringCase("name");
 
-        mvc.perform(get("/api/v1/admin/audit-events").with(as("ADMIN")))
+        mvc.perform(get("/api/v1/admin/audit-events").param("action", "REFUND_ELIGIBILITY_CHECK").with(as("ADMIN")))
                 .andExpect(jsonPath("$.content[0].action").value("REFUND_ELIGIBILITY_CHECK"))
                 .andExpect(jsonPath("$.content[0].details.policyVersion").value(POLICY));
     }
@@ -219,7 +219,8 @@ class RefundEligibilityApiIT {
                         .with(impostor).with(RealCsrf.token(mvc)))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/v1/payments/" + ref + "/timeline").with(impostor)).andExpect(status().isForbidden());
-        assertThat(jdbc.queryForObject("select count(*) from audit_events where actor like 'system:%'", Long.class))
+        assertThat(jdbc.queryForObject("select count(*) from audit_events where actor like 'system:%' "
+                + "and action <> 'AUDIT_CHAIN_GENESIS'", Long.class))
                 .isZero();
     }
 

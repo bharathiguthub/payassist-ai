@@ -159,7 +159,8 @@ class InvestigationApiIT {
                 .containsEntry("actor_subject", "sub-admin")
                 .containsEntry("correlation_id", "it-summary-0001");
 
-        mvc.perform(get("/api/v1/admin/audit-events").with(as("ADMIN")))
+        mvc.perform(get("/api/v1/admin/audit-events").param("action", "VIEW_INVESTIGATION_SUMMARY")
+                        .with(as("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].action").value("VIEW_INVESTIGATION_SUMMARY"))
                 .andExpect(jsonPath("$.content[0].correlationId").value("it-summary-0001"));

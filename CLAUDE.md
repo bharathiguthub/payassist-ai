@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-PayAssist AI: payment customer-support workspace for care executives. **Phase 1 only** is implemented
-(OIDC login, RBAC, payment investigation dashboard, audit log, synthetic data). Refund eligibility,
-RAG / Spring AI, LangGraph / MCP agents, Redis, Kafka, Langfuse and AWS are later phases. Do not
-implement them unless asked. Architecture: `docs/architecture.md`; decisions: `docs/adr/`.
+PayAssist AI: payment customer-support workspace for care executives. Phase 1 (OIDC login, RBAC, payment
+investigation dashboard, audit log, synthetic data) and Phase 2 milestones M1–M5 (payment lifecycle, investigation
+summary, refund eligibility, refund approval, disputes) are implemented; M6 (tamper-evident audit, security events,
+least-privilege DB role) is in progress on `feature/phase2-payment-domain`. RAG / Spring AI, LangGraph / MCP agents,
+Redis, Kafka, Langfuse and AWS are later phases. Do not implement them unless asked. Architecture:
+`docs/architecture.md`; decisions: `docs/adr/`.
 
 User constraints: synthetic data only; never hardcode credentials; ask before deleting files or
 pushing to GitHub; never deploy to paid cloud services without approval.
@@ -69,11 +71,17 @@ on the `OidcUser` principal, so read authorities from `Authentication`. Note tha
 types (e.g. `CustomerDirectory`, `PaymentViewedEvent`). Entities hold IDs, not JPA relations, across modules.
 New capabilities (refund, policy/RAG, assistant) go in new top-level modules.
 
-**Audit**: `PaymentQueryService.viewDetails` publishes `PaymentViewedEvent`; newer code publishes the generic
+**Audit** (ADR 0013): `PaymentQueryService.viewDetails` publishes `PaymentViewedEvent`; newer code publishes the generic
 `shared.AuditRecord` (actor from `identity.CurrentActor`, never a parameter). `audit` writes the row
 synchronously in the same read-write transaction (fail closed); `audit_events` is append-only. Keep detail
 reads audited. Investigation reads (`Roles.INVESTIGATE_PAYMENTS`, ADMIN read-only) are checked on controller
 **and** service. API contract: `docs/api.md`; learning guides: `docs/learning/`.
+
+Since V7 a DB trigger hash-chains every new `audit_events` row (`chain_seq`/`prev_hash`/`row_hash`, never set by the app);
+older rows are LEGACY, pinned by the `AUDIT_CHAIN_GENESIS` row. Audit writes must run in READ COMMITTED (the trigger refuses
+snapshot isolation). Every audit action and its detail keys must be registered in `audit/internal/AuditDetailPolicy`
+(unknown action/key fails the operation); new state-changing endpoints must be added to `AuditCoverageIT`.
+Only `*.web` controllers may use `RefundApprovals`/`DisputeResolutions` (`HumanOnlyActionsArchitectureTest`).
 
 **Payment lifecycle**: status changes only through `PaymentLedger` (public interface; impl
 `payment/internal/PaymentLedgerService`), which row-locks the payment, validates against

@@ -21,8 +21,9 @@ import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Refund eligibility use case.
@@ -50,14 +51,21 @@ public class RefundEligibilityService {
     private final RefundEligibilityEngine engine;
     private final ApplicationEventPublisher publisher;
     private final Clock clock;
+    private final TransactionTemplate snapshotTx;
+    private final TransactionTemplate auditTx;
 
     RefundEligibilityService(PaymentHistory payments, RefundReservations reservations, RefundEligibilityEngine engine,
-            ApplicationEventPublisher publisher, Clock clock) {
+            ApplicationEventPublisher publisher, Clock clock, PlatformTransactionManager transactionManager) {
         this.payments = payments;
         this.reservations = reservations;
         this.engine = engine;
         this.publisher = publisher;
         this.clock = clock;
+        this.snapshotTx = new TransactionTemplate(transactionManager);
+        this.snapshotTx.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        this.snapshotTx.setReadOnly(true);
+        this.auditTx = new TransactionTemplate(transactionManager);
+        this.auditTx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
     /**
@@ -69,7 +77,6 @@ public class RefundEligibilityService {
      *         precision, too many decimal places (never rounded), or a non-positive amount
      */
     @PreAuthorize(Roles.CHECK_REFUND_ELIGIBILITY)
-    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public RefundEligibility check(String paymentRef, BigDecimal amount, String currency) {
         Actor actor = CurrentActor.require();
 
@@ -83,13 +90,21 @@ public class RefundEligibilityService {
             requested = MonetaryAmounts.requirePositive(amount, currency); // rejects bad precision, never rounds
         }
 
-        RefundPosition position = payments.refundPosition(paymentRef);
-        BigDecimal reserved = reservations.reservedAmount(position.paymentId());
-        RefundEligibility result = engine.evaluate(position, requested, requestCurrency, reserved,
-                Instant.now(clock), MDC.get(CorrelationIdFilter.MDC_KEY));
+        // Facts are read in one consistent snapshot. The audit record is written afterwards in its own READ COMMITTED
+        // transaction, because the audit hash chain cannot be extended from a snapshot (ADR 0013). Still fail closed:
+        // if the audit write fails, the result is not returned.
+        BigDecimal requestedAmount = requested;
+        String currencyOfRequest = requestCurrency;
+        RefundEligibility result = snapshotTx.execute(status -> {
+            RefundPosition position = payments.refundPosition(paymentRef);
+            BigDecimal reserved = reservations.reservedAmount(position.paymentId());
+            return engine.evaluate(position, requestedAmount, currencyOfRequest, reserved,
+                    Instant.now(clock), MDC.get(CorrelationIdFilter.MDC_KEY));
+        });
 
-        publisher.publishEvent(AuditRecord.of(clock, actor, ACTION_CHECK, RESOURCE_PAYMENT, result.paymentRef())
-                .withDetails(auditDetails(result)));
+        auditTx.executeWithoutResult(status -> publisher.publishEvent(
+                AuditRecord.of(clock, actor, ACTION_CHECK, RESOURCE_PAYMENT, result.paymentRef())
+                        .withDetails(auditDetails(result))));
         return result;
     }
 

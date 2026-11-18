@@ -261,6 +261,20 @@ $logoutLocation = [string]$logout.Headers.Location
 Check 'logout redirects to Keycloak end-session' ($logoutLocation -match '/realms/payassist/protocol/openid-connect/logout' -and $logoutLocation -match 'id_token_hint')
 Check 'session is invalid after logout (401)' ((Status $alice.Session '/api/v1/payments') -eq 401)
 
+Write-Host "`n[10] Tamper-evident audit trail (ADR 0013)"
+function AdminAudit([string]$query) {
+    return (Body (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events?$query" $null @{ Accept = 'application/json' })) | ConvertFrom-Json
+}
+$logins = AdminAudit 'action=LOGIN_SUCCESS&actor=agent.alice&size=1'
+Check 'login of agent.alice is audited with roles, no tokens' ($logins.content.Count -eq 1 -and $logins.content[0].details.roles -eq 'CARE_AGENT' -and ($logins.content | ConvertTo-Json -Depth 5) -notmatch 'eyJ')
+Check 'logout of agent.alice is audited' ((AdminAudit 'action=LOGOUT&actor=agent.alice&size=1').content.Count -eq 1)
+Check 'new audit rows are hash-chained' ($logins.content[0].protection -eq 'CHAINED' -and $logins.content[0].chainSeq -gt 0)
+Check 'reading the audit log is itself audited' ((AdminAudit 'action=AUDIT_LOG_VIEW&actor=ada.admin&size=1').content.Count -eq 1)
+Check 'supervisor cannot verify audit integrity (403)' ((Status $sam.Session '/api/v1/admin/audit-events/integrity') -eq 403)
+$integrity = (Body (Send $ada.Session 'GET' "$BaseUrl/api/v1/admin/audit-events/integrity" $null @{ Accept = 'application/json' })) | ConvertFrom-Json
+Check "audit chain verifies (VALID, $($integrity.legacyRows) legacy + $($integrity.chainedRows) chained rows)" ($integrity.result -eq 'VALID' -and $integrity.chainedRows -gt 1)
+Check 'integrity check is audited' ((AdminAudit 'action=AUDIT_INTEGRITY_CHECK&size=1').content[0].details.result -eq 'VALID')
+
 Write-Host ''
 if ($script:failures -gt 0) { Write-Host "$($script:failures) check(s) FAILED" -ForegroundColor Red; exit 1 }
 Write-Host 'All smoke checks passed' -ForegroundColor Green

@@ -50,7 +50,7 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | `POST /disputes`, `/notes`, `/evidence`, `/start-investigation`, `/request-review` | ✔ | ✔ | 403 | 403 |
 | `POST /disputes/{ref}/` decisions (approve submission, outcome, liability, withdraw, return) | 403 | ✔ (SoD) | 403 | 403 |
 | `GET /payments/stats` | 403 | ✔ | ✔ | 403 |
-| `GET /admin/audit-events` | 403 | 403 | ✔ | 403 |
+| `GET /admin/audit-events`, `GET /admin/audit-events/integrity` | 403 | 403 | ✔ (audited) | 403 |
 
 Enforced twice: URL rules in `SecurityConfig` and `@PreAuthorize` on controllers **and** services.
 
@@ -62,7 +62,7 @@ Enforced twice: URL rules in `SecurityConfig` and `@PreAuthorize` on controllers
 - `GET /payments?q=&status=&page=&size=` — search by payment/customer reference prefix and status; paged.
 - `GET /payments/{paymentRef}` — details with masked customer email. Audited as `VIEW`.
 - `GET /payments/stats` — counts per status.
-- `GET /admin/audit-events?page=&size=` — audit trail, newest first. Phase 2 adds `correlationId` and a
+- `GET /admin/audit-events?page=&size=` — audit trail, newest first (filters and integrity: see "Audit trail" below). Phase 2 adds `correlationId` and a
   `details` object (non-sensitive codes, amounts and versions; e.g. eligibility decision and `policyVersion`).
 
 ## Phase 2 endpoints
@@ -357,3 +357,28 @@ Enumerations: evidence `type` ∈ `PROOF_OF_DELIVERY`, `CUSTOMER_COMMUNICATION`,
 
 **Audit**: `DISPUTE_CASE_OPEN`, `DISPUTE_CASE_VIEW`, `DISPUTE_NOTE_ADD`, `DISPUTE_EVIDENCE_ADD`,
 `DISPUTE_CASE_TRANSITION`, with outcome, actor subject and correlation ID. Note text is never audited.
+
+### Audit trail (ADMIN only, milestone 6, [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md))
+
+`GET /admin/audit-events` — newest first; all filters optional and exact-match:
+`actor` (username), `actorSubject` (OIDC `sub`), `action`, `resourceType`, `resourceId`,
+`outcome` (`SUCCESS`|`DENIED`|`FAILED`; Phase 1 rows without outcome count as SUCCESS), `correlationId`,
+`from` (inclusive) / `to` (exclusive) as ISO-8601 instants, `page` (0–10000), `size` (1–100).
+Malformed filters → 400; `from` not before `to` → 422 `INVALID_TIME_RANGE`; a filter that contains a card number or
+e-mail address → 422 `PERSONAL_DATA_IN_FILTER` (so it never reaches the audit trail).
+
+Each item adds `actorType` (`USER`/`SYSTEM`), `protection` (`CHAINED`, or `LEGACY` for rows written before the hash
+chain existed), `chainSeq` and `rowHash`. Audited as `AUDIT_LOG_VIEW` with the filters used.
+
+`GET /admin/audit-events/integrity` — recomputes the hash chain:
+```json
+{ "result": "VALID", "checkedAt": "2026-11-17T20:00:00Z", "legacyRows": 164, "chainedRows": 52,
+  "headChainSeq": 52, "headRowHash": "9f2c…", "firstFailure": null }
+```
+`BROKEN` reports `firstFailure: { auditEventId, chainSeq, reason }` with reason `GENESIS_MISSING`, `GENESIS_INVALID`,
+`LEGACY_ROWS_CHANGED`, `UNCHAINED_ROW_AFTER_GENESIS`, `CHAIN_SEQUENCE_GAP`, `PREVIOUS_HASH_MISMATCH` or
+`ROW_HASH_MISMATCH`. Keep `headChainSeq` + `headRowHash` outside the database as a checkpoint: removal of the newest rows
+is only detectable against such a checkpoint. Audited as `AUDIT_INTEGRITY_CHECK` (outcome FAILED when broken).
+
+**Security events**: `LOGIN_SUCCESS` (details: `roles`) and `LOGOUT`, resource `AUTHENTICATION` / `oidc:keycloak`.
+No tokens, session IDs or e-mail. Failed password attempts are recorded by Keycloak, not by PayAssist (deferred).

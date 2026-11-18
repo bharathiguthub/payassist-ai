@@ -63,6 +63,7 @@ class SecurityConfig {
             HttpSecurity http,
             ClientRegistrationRepository clientRegistrations,
             KeycloakRoleMapper roleMapper,
+            AuthenticationAuditor authenticationAuditor,
             PayAssistSecurityProperties properties,
             @Value("${server.servlet.session.cookie.name:JSESSIONID}") String sessionCookieName)
             throws Exception {
@@ -119,9 +120,12 @@ class SecurityConfig {
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(endpoint -> endpoint.authorizationRequestResolver(authorizationRequestResolver))
                         .userInfoEndpoint(userInfo -> userInfo.userAuthoritiesMapper(roleMapper))
-                        .defaultSuccessUrl(publicBaseUrl + "/", true)
+                        // Redirects to the SPA after recording LOGIN_SUCCESS (fail closed).
+                        .successHandler(authenticationAuditor.loginSuccessHandler(publicBaseUrl + "/",
+                                publicBaseUrl + "/?error=login_failed"))
                         .failureUrl(publicBaseUrl + "/?error=login_failed"))
                 .logout(logout -> logout
+                        .addLogoutHandler(authenticationAuditor.logoutHandler())
                         .logoutSuccessHandler(oidcLogout)
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)

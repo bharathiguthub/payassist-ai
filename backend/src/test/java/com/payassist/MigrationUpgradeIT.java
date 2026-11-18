@@ -65,12 +65,16 @@ class MigrationUpgradeIT {
                 .isEqualTo(400);
 
         // Phase 1 audit rows survive V3; the new context columns are simply empty for them.
-        assertThat(jdbc.queryForMap("select actor, action, actor_subject, correlation_id from audit_events"))
+        assertThat(jdbc.queryForMap(
+                "select actor, action, actor_subject, correlation_id from audit_events where chain_seq is null"))
                 .containsEntry("actor", "agent.alice").containsEntry("action", "VIEW")
                 .containsEntry("actor_subject", null).containsEntry("correlation_id", null);
+        // V7 pins the Phase 1 row in the genesis anchor of the audit hash chain instead of changing it.
+        assertThat(jdbc.queryForMap("select action, details->>'legacyRows' as legacy from audit_events where chain_seq = 1"))
+                .containsEntry("action", "AUDIT_CHAIN_GENESIS").containsEntry("legacy", "1");
         assertThat(jdbc.queryForObject(
-                "select count(*) from flyway_schema_history where version in ('2', '3', '4', '5', '6') and success", Long.class))
-                .isEqualTo(5);
+                "select count(*) from flyway_schema_history where version in ('2', '3', '4', '5', '6', '7') and success", Long.class))
+                .isEqualTo(6);
 
         // Re-running is a no-op (repeatable seed is idempotent; nothing pending).
         long events = jdbc.queryForObject("select count(*) from payment_events", Long.class);

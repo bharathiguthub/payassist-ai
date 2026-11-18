@@ -38,6 +38,18 @@ public record AuditRecord(
         FAILED
     }
 
+    /** Kind of actor. AGENT is reserved for later phases (an AI agent acting on behalf of a user). */
+    public enum ActorType {
+        USER,
+        SYSTEM,
+        AGENT
+    }
+
+    /** USER for a human actor, SYSTEM for a system actor. */
+    public ActorType actorType() {
+        return actor.isSystem() ? ActorType.SYSTEM : ActorType.USER;
+    }
+
     private static final Pattern DETAIL_KEY = Pattern.compile("^[a-z][A-Za-z0-9]{0,39}$");
     private static final int MAX_DETAIL_VALUE = 200;
     private static final int MAX_DETAILS = 20;

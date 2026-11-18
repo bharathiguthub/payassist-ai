@@ -25,7 +25,7 @@ class PaymentAccessAuditor {
 
     @EventListener
     void on(PaymentViewedEvent event) {
-        auditEvents.save(new AuditEvent(event.occurredAt(), event.actor(), null, ACTION_VIEW, RESOURCE_PAYMENT,
+        auditEvents.save(new AuditEvent(event.occurredAt(), event.actor(), null, "USER", ACTION_VIEW, RESOURCE_PAYMENT,
                 event.paymentRef(), MDC.get(CorrelationIdFilter.MDC_KEY), null, "SUCCESS"));
     }
 }

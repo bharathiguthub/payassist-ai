@@ -4,12 +4,13 @@ Enterprise AI-powered payment customer-support workspace. Customer care executiv
 payments, and (in later phases) check refund eligibility, search payment policies with RAG, and work
 with AI agents.
 
-> **Current status: Phase 1.** Secure login, role-based access, and a customer care dashboard
+> **Current status: Phase 2 (M6 in progress).** Phase 1 delivered secure login, role-based access, and a customer care dashboard
 > for payment investigation over **synthetic data only**. No AI features yet.
 > See [docs/architecture.md](docs/architecture.md) and the decision records in [docs/adr/](docs/adr/).
 > **Phase 2 in progress** (branch `feature/phase2-payment-domain`): payment lifecycle, timeline,
 > investigation summary, refund eligibility, refund requests with supervisor approval, and dispute case management
-> are done.
+> are done; milestone 6 adds a tamper-evident (hash-chained) audit trail, login/logout auditing and an audited admin
+> audit-log view.
 > No real money ever moves: approvals record simulated refunds. API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
 
 | Layer | Technology |
@@ -231,5 +232,5 @@ startup fails rather than running insecurely.
 
 ## 9. Roadmap (not implemented)
 
-Phase 2 refund eligibility · Phase 3 policy RAG (Spring AI, pgvector, Langfuse) · Phase 4 AI agents
+Phase 2 M6 least-privilege DB role, M7–M8 polish · Phase 3 policy RAG (Spring AI, pgvector, Langfuse) · Phase 4 AI agents
 (Python LangGraph, MCP tools, Kafka, Redis) · AWS deployment. See [docs/architecture.md](docs/architecture.md).

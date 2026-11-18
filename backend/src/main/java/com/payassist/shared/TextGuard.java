@@ -54,6 +54,11 @@ public final class TextGuard {
         return text == null || text.isBlank() ? null : requireSafe(text, maxLength);
     }
 
+    /** True if the text contains a plausible card number or an e-mail address (no exception, no echo). */
+    public static boolean containsPersonalData(String text) {
+        return text != null && (containsCardNumber(text) || EMAIL.matcher(text).find());
+    }
+
     static boolean containsCardNumber(String text) {
         Matcher m = DIGIT_RUN.matcher(text);
         while (m.find()) {
