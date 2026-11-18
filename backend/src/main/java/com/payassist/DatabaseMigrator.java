@@ -20,6 +20,8 @@ import org.flywaydb.core.Flyway;
  *       (schema owner; required)</li>
  *   <li>{@code PAYASSIST_MIGRATION_LOCATIONS}: comma-separated Flyway locations (default {@code classpath:db/migration};
  *       the dev stack adds {@code classpath:db/seed})</li>
+ *   <li>{@code PAYASSIST_DB_AUDITOR_PASSWORD}: optional; the same for the read-only role {@code payassist_auditor}
+ *       (V9) used by the external audit checkpoint job</li>
  *   <li>{@code PAYASSIST_DB_APP_PASSWORD}: optional; when set, the runtime role {@code payassist_app} (created
  *       NOLOGIN by V8) is given LOGIN with this password, keeping it in sync with {@code .env}</li>
  * </ul>
@@ -28,6 +30,7 @@ import org.flywaydb.core.Flyway;
 public final class DatabaseMigrator {
 
     static final String RUNTIME_ROLE = "payassist_app";
+    static final String AUDITOR_ROLE = "payassist_auditor";
 
     private DatabaseMigrator() {
     }
@@ -44,14 +47,21 @@ public final class DatabaseMigrator {
         System.out.printf("Flyway: %d migration(s) applied, schema version %s%n", result.migrationsExecuted,
                 result.targetSchemaVersion);
 
-        String appPassword = System.getenv("PAYASSIST_DB_APP_PASSWORD");
-        if (appPassword != null && !appPassword.isBlank()) {
-            try (Connection c = DriverManager.getConnection(url, user, password); Statement s = c.createStatement()) {
-                // ALTER ROLE cannot take bind parameters; the value is quoted as a SQL literal.
-                s.execute("ALTER ROLE " + RUNTIME_ROLE + " WITH LOGIN PASSWORD " + literal(appPassword));
-            }
-            System.out.println("Runtime role " + RUNTIME_ROLE + ": login enabled (password from environment)");
+        enableLogin(url, user, password, RUNTIME_ROLE, System.getenv("PAYASSIST_DB_APP_PASSWORD"));
+        enableLogin(url, user, password, AUDITOR_ROLE, System.getenv("PAYASSIST_DB_AUDITOR_PASSWORD"));
+    }
+
+    /** Gives a role created NOLOGIN by a migration its login, if a password is configured; otherwise leaves it as is. */
+    private static void enableLogin(String url, String user, String password, String role, String rolePassword)
+            throws SQLException {
+        if (rolePassword == null || rolePassword.isBlank()) {
+            return;
         }
+        try (Connection c = DriverManager.getConnection(url, user, password); Statement s = c.createStatement()) {
+            // ALTER ROLE cannot take bind parameters; the value is quoted as a SQL literal.
+            s.execute("ALTER ROLE " + role + " WITH LOGIN PASSWORD " + literal(rolePassword));
+        }
+        System.out.println("Role " + role + ": login enabled (password from environment)");
     }
 
     /** Standard SQL string literal (standard_conforming_strings is on by default since PostgreSQL 9.1). */

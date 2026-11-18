@@ -4,12 +4,13 @@ Enterprise AI-powered payment customer-support workspace. Customer care executiv
 payments, and (in later phases) check refund eligibility, search payment policies with RAG, and work
 with AI agents.
 
-> **Current status: Phase 2 (M6 in progress).** Phase 1 delivered secure login, role-based access, and a customer care dashboard
+> **Current status: Phase 2 (M1–M6 done).** Phase 1 delivered secure login, role-based access, and a customer care dashboard
 > for payment investigation over **synthetic data only**. No AI features yet.
 > See [docs/architecture.md](docs/architecture.md) and the decision records in [docs/adr/](docs/adr/).
 > **Phase 2 in progress** (branch `feature/phase2-payment-domain`): payment lifecycle, timeline,
 > investigation summary, refund eligibility, refund requests with supervisor approval, and dispute case management
-> are done; milestone 6 adds a tamper-evident (hash-chained) audit trail, login/logout auditing and an audited admin
+> are done, plus milestone 6: a tamper-evident (hash-chained, externally checkpointed) audit trail, login/logout
+> auditing, least-privilege database roles and an audited admin
 > audit-log view.
 > No real money ever moves: approvals record simulated refunds. API: [docs/api.md](docs/api.md); learning guides: [docs/learning/](docs/learning/).
 
@@ -225,8 +226,12 @@ startup fails rather than running insecurely.
 ## 8. Security notes
 
 - The backend connects to PostgreSQL as the restricted role `payassist_app`; the schema owner is used only by the one-off
-  `migrate` job. Existing `.env` files from before milestone 6.3 need `scripts/add-app-db-password.ps1` once. Apply,
-  rotate and roll back: [docs/runbooks/runtime-db-role.md](docs/runbooks/runtime-db-role.md).
+  `migrate` job. Existing `.env` files from before milestone 6.3/6.4 need `scripts/add-missing-secrets.ps1` once
+  (adds any missing generated secret, never prints it). Apply, rotate and roll back:
+  [docs/runbooks/runtime-db-role.md](docs/runbooks/runtime-db-role.md).
+- Audit checkpoints: `.\scripts\audit-checkpoint.ps1 -Create` verifies the audit hash chain and appends an HMAC-signed
+  checkpoint to `audit-checkpoints/` (outside PostgreSQL, git-ignored; keep a copy elsewhere). Run it at least daily and
+  after deployments: [docs/runbooks/audit-checkpoints.md](docs/runbooks/audit-checkpoints.md).
 - Synthetic data only: no real customers, payments, card numbers or bank details.
 - `.env` holds **local development** secrets only and is git-ignored. Production secrets belong in a
   secrets manager.
@@ -236,5 +241,5 @@ startup fails rather than running insecurely.
 
 ## 9. Roadmap (not implemented)
 
-Phase 2 M6 least-privilege DB role, M7–M8 polish · Phase 3 policy RAG (Spring AI, pgvector, Langfuse) · Phase 4 AI agents
+Phase 2 M7–M8 polish · Phase 3 policy RAG (Spring AI, pgvector, Langfuse) · Phase 4 AI agents
 (Python LangGraph, MCP tools, Kafka, Redis) · AWS deployment. See [docs/architecture.md](docs/architecture.md).

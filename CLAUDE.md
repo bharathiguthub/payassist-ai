@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PayAssist AI: payment customer-support workspace for care executives. Phase 1 (OIDC login, RBAC, payment
 investigation dashboard, audit log, synthetic data) and Phase 2 milestones M1–M5 (payment lifecycle, investigation
-summary, refund eligibility, refund approval, disputes) are implemented; M6 (tamper-evident audit, security events,
-least-privilege DB role) is in progress on `feature/phase2-payment-domain`. RAG / Spring AI, LangGraph / MCP agents,
+summary, refund eligibility, refund approval, disputes) and M6 (tamper-evident audit with external checkpoints,
+security events, least-privilege DB roles) are implemented on `feature/phase2-payment-domain`. RAG / Spring AI, LangGraph / MCP agents,
 Redis, Kafka, Langfuse and AWS are later phases. Do not implement them unless asked. Architecture:
 `docs/architecture.md`; decisions: `docs/adr/`.
 
@@ -120,6 +120,12 @@ PayAssist never computes dispute deadlines or encodes network reason-code scheme
 Two DB credentials (ADR 0013, V8): the schema owner runs Flyway only (Compose `migrate` job, `DatabaseMigrator`); the
 backend connects as `payassist_app` (SELECT/INSERT, a few UPDATEs, never DELETE/TRUNCATE/DDL, owns nothing). **A new
 table needs explicit GRANTs to `payassist_app` in its migration**, and `RuntimeRolePrivilegesIT` lists the exact grants.
+V9: UPDATE on `refund_requests`/`dispute_cases` is column-level (workflow columns only; others are `updatable = false`)
+and guard triggers enforce immutable columns, final states and the state machines for every role; if you change
+`RefundRequestTransitions`/`DisputeTransitions`, change the SQL functions too (`CaseTableGuardsIT` compares them).
+No TEMPORARY privilege for app roles. `payassist_auditor` (SELECT on `audit_events` only) is used solely by the
+on-demand `audit-checkpoint` Compose tool; the checkpoint key and `audit-checkpoints/` must never reach the backend
+(`DeploymentSecretsContractTest`).
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`
 profile (`application-dev.yml`) and the `test` profile. Integration tests assert exact seed counts
 (40 customers, 400 payments). pgvector is available in the image, but `CREATE EXTENSION vector` is

@@ -76,3 +76,22 @@ Detection (the chain) is paired with **prevention**: the backend no longer conne
   integration test runs as that role, so a missing grant fails the build rather than production.
 - AI angle: the same pattern applies to agent tools: each tool gets its own narrowly scoped credential, and the model
   never sees credentials at all.
+
+## 10. Final hardening (M6.4)
+- **Column-level privileges** — a refund request's amount, requester and policy version never change after creation,
+  so the runtime role cannot update them at all (`GRANT UPDATE (status, updated_at, version)`), and the JPA entity
+  marks them `updatable = false` so Hibernate never tries.
+- **Rules that hold even for the owner** — guard triggers keep decided refunds and closed disputes final, enforce the
+  state machines and forbid deletes. Duplicating the state machine in SQL is a deliberate trade-off; a test compares
+  every (from, to) pair with the Java table so the copies cannot silently diverge.
+- **Remove what you do not use** — the TEMPORARY privilege is granted to everyone by default; nothing in PayAssist
+  needs it, so application roles lose it.
+- **Anchoring outside the system you distrust** — the hash chain cannot detect someone with owner rights who deletes
+  the newest rows or recomputes every hash. An external, HMAC-signed checkpoint ledger can: `AuditCheckpointIT`
+  forges both attacks; the database check says VALID, the checkpoint check says `CHECKPOINTED_ROW_MISSING` /
+  `CHECKPOINT_MISMATCH`. The checkpoint job uses its own read-only role and is the only component with the key.
+- **State your trust boundary** — a local ledger protects against database-level tampering, not a compromised host.
+  Write-once storage owned by another account (S3 Object Lock, transparency logs, RFC 3161 timestamps) moves the
+  boundary further out; see the [checkpoint runbook](../runbooks/audit-checkpoints.md).
+- AI angle: when agents act, the same checkpoints let you prove afterwards that the record of what an agent did has
+  not been edited by anyone, including the people operating the database.

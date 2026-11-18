@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.payassist.support.IntegrationTest;
 import com.payassist.support.PostgresTestcontainersConfig;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -66,18 +67,35 @@ class RuntimeRolePrivilegesIT {
                         "audit_events:INSERT,SELECT",
                         "customers:SELECT",
                         "dispute_case_events:INSERT,SELECT",
-                        "dispute_cases:INSERT,SELECT,UPDATE",
+                        "dispute_cases:INSERT,SELECT",
                         "dispute_evidence:INSERT,SELECT",
                         "dispute_notes:INSERT,SELECT",
                         "payment_events:INSERT,SELECT",
                         "payments:SELECT",
                         "refund_decisions:INSERT,SELECT",
-                        "refund_requests:INSERT,SELECT,UPDATE");
+                        "refund_requests:INSERT,SELECT");
         assertThat(jdbc.queryForList("""
                 select column_name from information_schema.column_privileges
                 where grantee = current_user and table_name = 'payments' and privilege_type = 'UPDATE'
                 order by column_name""", String.class))
                 .containsExactly("failure_reason", "status", "updated_at", "version");
+        // Case files (V9): only the workflow columns, never amounts, payment, requester or idempotency data.
+        assertThat(columnUpdates("refund_requests")).containsExactly("status", "updated_at", "version");
+        assertThat(columnUpdates("dispute_cases")).containsExactly("review_requested_at", "review_requested_by_subject",
+                "review_requested_by_username", "status", "updated_at", "version");
+    }
+
+    private List<String> columnUpdates(String table) {
+        return jdbc.queryForList("""
+                select column_name from information_schema.column_privileges
+                where grantee = current_user and table_name = ? and privilege_type = 'UPDATE'
+                order by column_name""", String.class, table);
+    }
+
+    @Test
+    void theRuntimeRoleCannotCreateTemporaryObjects() {
+        assertThat(jdbc.queryForObject("select has_database_privilege(current_database(), 'TEMPORARY')",
+                Boolean.class)).isFalse();
     }
 
 
@@ -135,6 +153,20 @@ class RuntimeRolePrivilegesIT {
             "update payments set currency = 'XXX'",
             "insert into payments (id) values (gen_random_uuid())",
             "update customers set full_name = 'x'",
+            // Case files: immutable columns and deletes (V9)
+            "update refund_requests set amount = 1",
+            "update refund_requests set requested_by_subject = 'sub-other'",
+            "update refund_requests set policy_version = 'X'",
+            "update refund_requests set payment_id = gen_random_uuid()",
+            "update dispute_cases set disputed_amount = 1",
+            "update dispute_cases set opened_by_subject = 'sub-other'",
+            "update dispute_cases set payment_ref = 'PAY-000001'",
+            "delete from refund_requests",
+            "truncate dispute_cases",
+            // Temporary objects (V9)
+            "create temp table evil (id int)",
+            "create temporary view evil as select 1",
+            "set role payassist_auditor",
             "insert into flyway_schema_history (installed_rank) values (999)",
             "select * from flyway_schema_history",
             // Widening its own privileges

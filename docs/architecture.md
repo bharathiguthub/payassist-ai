@@ -148,9 +148,9 @@ Rules (checked by `ModularityTest` using Spring Modulith):
 | `customers` | Synthetic customers | `customer_ref` unique; email always masked in API responses |
 | `payments` | Synthetic payments | Status/method enforced with CHECK constraints; **no PAN, CVV or bank account data** |
 | `audit_events` | Access audit trail | Append-only (DB trigger since V3); written in the same transaction as the operation it audits; actor subject + correlation ID since V3; non-sensitive JSONB `details` since V4; `outcome` SUCCESS/DENIED/FAILED since V5; `actor_type` and hash chain (`chain_seq`, `prev_hash`, `row_hash`) since V7, older rows LEGACY |
-| `refund_requests` | Refund requests (Phase 2) | Reserve their amount while pending; idempotency key unique per requester; optimistic `version` |
+| `refund_requests` | Refund requests (Phase 2) | Only `status`/`updated_at`/`version` updatable, final once decided (V9 guards); Reserve their amount while pending; idempotency key unique per requester; optimistic `version` |
 | `refund_decisions` | Approve/reject decisions | Append-only, one per request; approvals reference their unique `REFUND_RECORDED` ledger event |
-| `dispute_cases` | Dispute case files (Phase 2) | One active case per payment (partial unique index); idempotency key per opener; optimistic `version`; deadline only as provided |
+| `dispute_cases` | Dispute case files (Phase 2) | Only workflow columns updatable, final once closed (V9 guards); One active case per payment (partial unique index); idempotency key per opener; optimistic `version`; deadline only as provided |
 | `dispute_case_events`, `dispute_notes`, `dispute_evidence` | Case history, notes, evidence metadata | Append-only (triggers); history entries that changed the payment reference their unique ledger event |
 | `payment_events` | Payment history (Phase 2) | Append-only (DB trigger); written only by `PaymentLedger` together with the status change; see [ADR 0008](adr/0008-payment-lifecycle-and-event-history.md) |
 
@@ -169,7 +169,7 @@ migration loaded **only** by the `dev` profile and tests.
 | M3 Refund eligibility engine | Done | [ADR 0010](adr/0010-refund-eligibility-engine.md), [guide](learning/phase2-m3-refund-eligibility.md), [API](api.md) |
 | M4 Refund requests and supervisor approval | Done | [ADR 0011](adr/0011-refund-requests-and-approval.md), [guide](learning/phase2-m4-refund-approval.md), [API](api.md) |
 | M5 Dispute case management | Done | [ADR 0012](adr/0012-dispute-case-management.md), [guide](learning/phase2-m5-disputes.md), [API](api.md) |
-| M6 Audit & security: hash-chained audit, login/logout + audit-of-audit events, least-privilege DB role | In progress (6.1–6.3 done, 6.4 polish pending) | [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md), [API](api.md) |
+| M6 Audit & security: hash-chained audit, login/logout + audit-of-audit events, least-privilege DB role | Done (6.1–6.4) | [runbooks](runbooks/) | [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md), [API](api.md) |
 | M7–M8 Frontend polish, docs | Planned | |
 
 ## 7. Security controls (Phase 1)
@@ -185,11 +185,13 @@ migration loaded **only** by the `dev` profile and tests.
 | Data exposure | Masked customer email; no card data; DTOs instead of entities; no stack traces in errors |
 | Secrets leakage | All secrets from environment; `.env` git-ignored; startup fails if a secret is missing |
 | Database privilege abuse | Backend connects as `payassist_app` (DML only, owns nothing, no DELETE/TRUNCATE/DDL, no grant options); schema owner used only by the one-off migrate job ([runbook](runbooks/runtime-db-role.md)) |
+| Case-file tampering | Column-level UPDATE grants (workflow columns only) and guard triggers for every role: immutable money/identity columns, final decisions, state machines, no deletes (V9) |
+| Session staging / object shadowing | No TEMPORARY privilege for application roles; pinned function `search_path` |
 | Brute force | Keycloak brute-force detection; password policy |
 | Clickjacking | `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'` |
 | Log injection / traceability | Correlation IDs validated before logging; per-request ID in every log line |
 | Accountability | Audit of every sensitive read and every write, logins/logouts and reads of the audit log itself (ADMIN only) |
-| Audit tampering | Append-only triggers; SHA-256 hash chain from V7 with a genesis anchor pinning older rows; on-demand verification ([ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md)) |
+| Audit tampering | Append-only triggers; SHA-256 hash chain from V7 with a genesis anchor pinning older rows; on-demand verification; HMAC-signed external checkpoints outside PostgreSQL detect tail removal and full-chain rewrites ([checkpoint runbook](runbooks/audit-checkpoints.md), [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md)) |
 
 ---
 

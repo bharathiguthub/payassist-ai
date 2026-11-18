@@ -1,6 +1,6 @@
 # ADR 0013 — Tamper-evident audit trail, security events and least-privilege database access
 
-**Status:** Accepted (Phase 2, milestone 6). Decisions 1–4 approved by the product owner: genesis anchor for
+**Status:** Accepted (Phase 2, milestone 6: 6.1–6.4). Decisions 1–4 approved by the product owner: genesis anchor for
 historical rows, schema-owner / runtime-role split, ADMIN-only audit access, failed-password events deferred.
 
 ## Context
@@ -81,10 +81,37 @@ on `RefundApprovals` or `DisputeResolutions`; tool-ready interfaces may not exte
 - New tables must be granted explicitly in their migration. Operations: [runbook](../runbooks/runtime-db-role.md)
   (apply, rotate, roll back, restore).
 
+### 8. Case files: column-level updates and database-enforced rules (milestone 6.4)
+- V9 replaces the table-wide UPDATE of V8 on `refund_requests` and `dispute_cases` with column grants: refund
+  requests `status`, `updated_at`, `version`; dispute cases additionally the three `review_requested_*` columns.
+  Amounts, currency, payment, requester/opener, idempotency data, eligibility snapshot and policy version are
+  `updatable = false` in the entities and cannot be updated by the runtime role.
+- Guard triggers enforce, **for every role including the owner**: immutable columns, final states (APPROVED/REJECTED,
+  WON/LOST/WITHDRAWN), the state machines, the review requester being set only on REQUEST_REVIEW, versions never
+  going backwards, and no DELETE/TRUNCATE. The SQL state machines duplicate the Java ones on purpose;
+  `CaseTableGuardsIT` compares every (from, to) pair so they cannot drift.
+
+### 9. No temporary objects
+V9 revokes `TEMPORARY` on the database from PUBLIC (granted by default) and from both application roles; the owner
+keeps it. Hibernate and the application never use temporary tables; revoking it removes a place where a compromised
+session could stage data or shadow objects.
+
+### 10. External checkpoints of the audit chain
+- An on-demand job (`AuditCheckpointTool`, Compose service `audit-checkpoint`, profile `tools`) verifies the chain as
+  the new read-only role `payassist_auditor` (SELECT on `audit_events` only) and appends a checkpoint (head
+  `chain_seq` + `row_hash`, genesis hash, counts) to a JSON-lines ledger **outside PostgreSQL**
+  (`audit-checkpoints/`, git-ignored). Each line is HMAC-SHA256-signed over its content and the previous line's MAC.
+- Later runs require every checkpointed head to still exist with the same hash. This detects the two attacks the
+  in-database check cannot: removal of the newest rows and a whole chain recomputed with owner rights
+  (`AuditCheckpointIT` shows both passing the database check and failing the checkpoint check).
+- Trust boundary: the backend and every database role have neither the ledger nor the key
+  (`DeploymentSecretsContractTest`); the host account holding `.env` is trusted. Production: WORM storage and a KMS.
+  Operations, recovery and limitations: [runbook](../runbooks/audit-checkpoints.md).
+
 ## Consequences
 - Detects any edit/deletion inside the chain or of historical rows made with owner rights; does not prevent it.
 - Audit writes are serialized; very long transactions that audit early delay other audited transactions.
 - Verification is O(rows) and on demand.
-- Threat model (STRIDE): Tampering → hash chain + genesis anchor; Repudiation → login/logout and audit-of-audit
+- Threat model (STRIDE): Tampering → hash chain + genesis anchor + external HMAC checkpoints, case-file guard triggers; Repudiation → login/logout and audit-of-audit
   events with `sub`; Information disclosure → ADMIN-only, detail allow-list, personal-data guard; Elevation of
   privilege → runtime role without DDL (6.3), human-only architecture rule.

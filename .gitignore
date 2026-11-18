@@ -22,3 +22,6 @@ Thumbs.db
 
 # Local database backups (synthetic data, never committed)
 backups/
+
+# External audit-chain checkpoint ledger (ADR 0013): outside git and outside PostgreSQL
+audit-checkpoints/

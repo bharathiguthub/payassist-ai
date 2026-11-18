@@ -27,23 +27,23 @@ public class RefundRequest {
     @Id
     private UUID id;
 
-    @Column(name = "refund_ref", nullable = false, unique = true, length = 32)
+    @Column(name = "refund_ref", updatable = false, nullable = false, unique = true, length = 32)
     private String refundRef;
 
-    @Column(name = "payment_id", nullable = false)
+    @Column(name = "payment_id", updatable = false, nullable = false)
     private UUID paymentId;
 
-    @Column(name = "payment_ref", nullable = false, length = 32)
+    @Column(name = "payment_ref", updatable = false, nullable = false, length = 32)
     private String paymentRef;
 
-    @Column(name = "amount", nullable = false, precision = 19, scale = 2)
+    @Column(name = "amount", updatable = false, nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "currency", nullable = false, length = 3)
+    @Column(name = "currency", updatable = false, nullable = false, length = 3)
     private String currency;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "reason_code", nullable = false, length = 64)
+    @Column(name = "reason_code", updatable = false, nullable = false, length = 64)
     private RefundReason reason;
 
     @Enumerated(EnumType.STRING)
@@ -51,32 +51,32 @@ public class RefundRequest {
     private RefundRequestStatus status;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "eligibility_decision", nullable = false, length = 16)
+    @Column(name = "eligibility_decision", updatable = false, nullable = false, length = 16)
     private RefundEligibility.Decision eligibilityDecision;
 
     /** Comma-separated eligibility reason codes. */
-    @Column(name = "eligibility_reasons", nullable = false, length = 500)
+    @Column(name = "eligibility_reasons", updatable = false, nullable = false, length = 500)
     private String eligibilityReasons;
 
-    @Column(name = "policy_version", nullable = false, length = 64)
+    @Column(name = "policy_version", updatable = false, nullable = false, length = 64)
     private String policyVersion;
 
-    @Column(name = "requested_by_subject", nullable = false, length = 128)
+    @Column(name = "requested_by_subject", updatable = false, nullable = false, length = 128)
     private String requestedBySubject;
 
-    @Column(name = "requested_by_username", nullable = false, length = 128)
+    @Column(name = "requested_by_username", updatable = false, nullable = false, length = 128)
     private String requestedByUsername;
 
-    @Column(name = "requested_at", nullable = false)
+    @Column(name = "requested_at", updatable = false, nullable = false)
     private Instant requestedAt;
 
-    @Column(name = "correlation_id", length = 64)
+    @Column(name = "correlation_id", updatable = false, length = 64)
     private String correlationId;
 
-    @Column(name = "idempotency_key", nullable = false, length = 64)
+    @Column(name = "idempotency_key", updatable = false, nullable = false, length = 64)
     private String idempotencyKey;
 
-    @Column(name = "request_fingerprint", nullable = false, length = 64)
+    @Column(name = "request_fingerprint", updatable = false, nullable = false, length = 64)
     private String requestFingerprint;
 
     @Version

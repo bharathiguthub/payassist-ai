@@ -69,6 +69,30 @@ services:
       PAYASSIST_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
       PAYASSIST_MIGRATION_LOCATIONS: classpath:db/migration,classpath:db/seed   # dev stack: + synthetic seed
       PAYASSIST_DB_APP_PASSWORD: ${PAYASSIST_DB_APP_PASSWORD:?Run scripts/add-app-db-password.ps1}
+      PAYASSIST_DB_AUDITOR_PASSWORD: ${PAYASSIST_DB_AUDITOR_PASSWORD:-}   # optional: enables the auditor login
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  audit-checkpoint:
+    # On-demand tool (ADR 0013 section 10), never started by "docker compose up" (profile "tools"). Verifies the audit
+    # chain as the read-only payassist_auditor role and appends an HMAC-signed checkpoint to a ledger OUTSIDE
+    # PostgreSQL. Only this service mounts the ledger and receives the HMAC key; the backend has neither.
+    #   docker compose run --rm --no-deps audit-checkpoint create|verify      (or scripts\audit-checkpoint.ps1)
+    image: payassist-backend:local
+    profiles: ["tools"]
+    entrypoint: ["java", "-cp", "/app/app.jar", "-Dloader.main=com.payassist.audit.internal.AuditCheckpointTool",
+                 "org.springframework.boot.loader.launch.PropertiesLauncher"]
+    command: ["verify"]
+    restart: "no"
+    environment:
+      PAYASSIST_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-payassist}
+      PAYASSIST_AUDITOR_USERNAME: payassist_auditor
+      PAYASSIST_DB_AUDITOR_PASSWORD: ${PAYASSIST_DB_AUDITOR_PASSWORD:-}
+      PAYASSIST_AUDIT_CHECKPOINT_KEY: ${PAYASSIST_AUDIT_CHECKPOINT_KEY:-}
+      PAYASSIST_AUDIT_CHECKPOINT_FILE: /checkpoints/audit-checkpoints.jsonl
+    volumes:
+      - ./audit-checkpoints:/checkpoints
     depends_on:
       postgres:
         condition: service_healthy

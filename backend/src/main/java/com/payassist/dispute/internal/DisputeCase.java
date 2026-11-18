@@ -26,45 +26,45 @@ public class DisputeCase {
     @Id
     private UUID id;
 
-    @Column(name = "case_ref", nullable = false, unique = true, length = 32)
+    @Column(name = "case_ref", updatable = false, nullable = false, unique = true, length = 32)
     private String caseRef;
 
-    @Column(name = "payment_id", nullable = false)
+    @Column(name = "payment_id", updatable = false, nullable = false)
     private UUID paymentId;
 
-    @Column(name = "payment_ref", nullable = false, length = 32)
+    @Column(name = "payment_ref", updatable = false, nullable = false, length = 32)
     private String paymentRef;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "reason_category", nullable = false, length = 32)
+    @Column(name = "reason_category", updatable = false, nullable = false, length = 32)
     private DisputeReasonCategory reasonCategory;
 
-    @Column(name = "network_reason_code", length = 16)
+    @Column(name = "network_reason_code", updatable = false, length = 16)
     private String networkReasonCode;
 
-    @Column(name = "disputed_amount", nullable = false, precision = 19, scale = 2)
+    @Column(name = "disputed_amount", updatable = false, nullable = false, precision = 19, scale = 2)
     private BigDecimal disputedAmount;
 
-    @Column(name = "currency", nullable = false, length = 3)
+    @Column(name = "currency", updatable = false, nullable = false, length = 3)
     private String currency;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private DisputeStatus status;
 
-    @Column(name = "source", nullable = false, length = 16)
+    @Column(name = "source", updatable = false, nullable = false, length = 16)
     private String source;
 
-    @Column(name = "response_due_at")
+    @Column(name = "response_due_at", updatable = false)
     private Instant responseDueAt;
 
-    @Column(name = "opened_by_subject", length = 128)
+    @Column(name = "opened_by_subject", updatable = false, length = 128)
     private String openedBySubject;
 
-    @Column(name = "opened_by_username", nullable = false, length = 128)
+    @Column(name = "opened_by_username", updatable = false, nullable = false, length = 128)
     private String openedByUsername;
 
-    @Column(name = "opened_at", nullable = false)
+    @Column(name = "opened_at", updatable = false, nullable = false)
     private Instant openedAt;
 
     @Column(name = "review_requested_by_subject", length = 128)
@@ -76,13 +76,13 @@ public class DisputeCase {
     @Column(name = "review_requested_at")
     private Instant reviewRequestedAt;
 
-    @Column(name = "correlation_id", length = 64)
+    @Column(name = "correlation_id", updatable = false, length = 64)
     private String correlationId;
 
-    @Column(name = "idempotency_key", length = 64)
+    @Column(name = "idempotency_key", updatable = false, length = 64)
     private String idempotencyKey;
 
-    @Column(name = "request_fingerprint", length = 64)
+    @Column(name = "request_fingerprint", updatable = false, length = 64)
     private String requestFingerprint;
 
     @Version
