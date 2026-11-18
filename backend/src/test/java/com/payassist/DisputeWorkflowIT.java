@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.payassist.support.OwnerJdbc;
 import com.payassist.support.DisputeTestPayments;
 import com.payassist.support.MutatingIntegrationTest;
 import com.payassist.support.RealCsrf;
@@ -47,6 +48,9 @@ class DisputeWorkflowIT {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private OwnerJdbc owner;
 
     @Test
     void wonDisputeRestoresThePaymentAndOnlyThenThePendingRefundCanBeApprovedOnce() throws Exception {
@@ -258,10 +262,14 @@ class DisputeWorkflowIT {
         assertThat(jdbc.queryForObject("select correlation_id is not null from audit_events where resource_id = ? "
                 + "and action = 'DISPUTE_CASE_OPEN' order by id limit 1", Boolean.class, ref)).isTrue();
 
-        // History, notes and evidence are immutable in the database.
+        // History, notes and evidence are immutable in the database: the application role has no DELETE privilege,
+        // and the append-only triggers stop even the schema owner.
         for (String table : List.of("dispute_case_events", "dispute_notes")) {
             assertThatThrownBy(() -> jdbc.update("delete from " + table)).isInstanceOf(DataAccessException.class)
-                    .hasMessageContaining("append-only");
+                    .satisfies(e -> assertThat(((DataAccessException) e).getMostSpecificCause().getMessage())
+                            .contains("permission denied"));
+            assertThatThrownBy(() -> owner.template().update("delete from " + table))
+                    .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
         }
     }
 

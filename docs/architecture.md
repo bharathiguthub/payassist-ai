@@ -169,7 +169,7 @@ migration loaded **only** by the `dev` profile and tests.
 | M3 Refund eligibility engine | Done | [ADR 0010](adr/0010-refund-eligibility-engine.md), [guide](learning/phase2-m3-refund-eligibility.md), [API](api.md) |
 | M4 Refund requests and supervisor approval | Done | [ADR 0011](adr/0011-refund-requests-and-approval.md), [guide](learning/phase2-m4-refund-approval.md), [API](api.md) |
 | M5 Dispute case management | Done | [ADR 0012](adr/0012-dispute-case-management.md), [guide](learning/phase2-m5-disputes.md), [API](api.md) |
-| M6 Audit & security: hash-chained audit, login/logout + audit-of-audit events, least-privilege DB role | In progress (6.1–6.2 done, 6.3 pending review) | [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md), [API](api.md) |
+| M6 Audit & security: hash-chained audit, login/logout + audit-of-audit events, least-privilege DB role | In progress (6.1–6.3 done, 6.4 polish pending) | [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md), [API](api.md) |
 | M7–M8 Frontend polish, docs | Planned | |
 
 ## 7. Security controls (Phase 1)
@@ -184,6 +184,7 @@ migration loaded **only** by the `dev` profile and tests.
 | Injection | JPA Criteria with bound parameters; input pattern validation; LIKE wildcards escaped |
 | Data exposure | Masked customer email; no card data; DTOs instead of entities; no stack traces in errors |
 | Secrets leakage | All secrets from environment; `.env` git-ignored; startup fails if a secret is missing |
+| Database privilege abuse | Backend connects as `payassist_app` (DML only, owns nothing, no DELETE/TRUNCATE/DDL, no grant options); schema owner used only by the one-off migrate job ([runbook](runbooks/runtime-db-role.md)) |
 | Brute force | Keycloak brute-force detection; password policy |
 | Clickjacking | `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'` |
 | Log injection / traceability | Correlation IDs validated before logging; per-request ID in every log line |

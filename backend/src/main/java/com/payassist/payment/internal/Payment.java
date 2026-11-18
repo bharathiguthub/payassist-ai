@@ -24,16 +24,16 @@ public class Payment {
     @Id
     private UUID id;
 
-    @Column(name = "payment_ref", nullable = false, unique = true, length = 32)
+    @Column(name = "payment_ref", updatable = false, nullable = false, unique = true, length = 32)
     private String paymentRef;
 
-    @Column(name = "customer_id", nullable = false)
+    @Column(name = "customer_id", updatable = false, nullable = false)
     private UUID customerId;
 
-    @Column(name = "amount", nullable = false, precision = 19, scale = 2)
+    @Column(name = "amount", updatable = false, nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
-    @Column(name = "currency", nullable = false, length = 3)
+    @Column(name = "currency", updatable = false, nullable = false, length = 3)
     private String currency;
 
     @Enumerated(EnumType.STRING)
@@ -41,16 +41,16 @@ public class Payment {
     private PaymentStatus status;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_method", nullable = false, length = 32)
+    @Column(name = "payment_method", updatable = false, nullable = false, length = 32)
     private PaymentMethod paymentMethod;
 
-    @Column(name = "merchant_name", nullable = false, length = 200)
+    @Column(name = "merchant_name", updatable = false, nullable = false, length = 200)
     private String merchantName;
 
     @Column(name = "failure_reason", length = 64)
     private String failureReason;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", updatable = false, nullable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)

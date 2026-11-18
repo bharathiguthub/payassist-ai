@@ -1,10 +1,11 @@
-# PayAssist AI - Phase 1 local stack.
+# PayAssist AI - local stack.
 # All secrets come from .env (copy .env.example or run scripts\new-dev-env.ps1). Compose refuses to
 # start if a required secret is missing (${VAR:?...}). Ports bind to 127.0.0.1 only.
 #
 #   Browser -> http://localhost:3000 (nginx: SPA + reverse proxy) -> backend:8080 (Spring BFF)
 #   Browser -> http://localhost:8180 (Keycloak login pages)
-#   backend -> keycloak:8080 (token/JWKS back channel), backend -> postgres:5432
+#   backend -> keycloak:8080 (token/JWKS back channel), backend -> postgres:5432 as payassist_app
+#   migrate (one-off) -> postgres:5432 as the schema owner (Flyway), then exits
 
 name: payassist
 
@@ -54,14 +55,35 @@ services:
       retries: 30
       start_period: 30s
 
+  migrate:
+    # One-off job (ADR 0013, M6.3): applies Flyway migrations as the SCHEMA OWNER, enables the runtime role's login
+    # with PAYASSIST_DB_APP_PASSWORD, then exits. The long-running backend never receives the owner's credentials.
+    build: ./backend
+    image: payassist-backend:local
+    entrypoint: ["java", "-cp", "/app/app.jar", "-Dloader.main=com.payassist.DatabaseMigrator",
+                 "org.springframework.boot.loader.launch.PropertiesLauncher"]
+    restart: "no"
+    environment:
+      PAYASSIST_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-payassist}
+      PAYASSIST_MIGRATION_USERNAME: ${POSTGRES_USER}
+      PAYASSIST_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
+      PAYASSIST_MIGRATION_LOCATIONS: classpath:db/migration,classpath:db/seed   # dev stack: + synthetic seed
+      PAYASSIST_DB_APP_PASSWORD: ${PAYASSIST_DB_APP_PASSWORD:?Run scripts/add-app-db-password.ps1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build: ./backend
+    image: payassist-backend:local
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: dev          # dev = synthetic seed data + OpenAPI docs
       PAYASSIST_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-payassist}
-      PAYASSIST_DB_USERNAME: ${POSTGRES_USER}
-      PAYASSIST_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Restricted runtime role (V8): DML only, owns nothing, cannot disable triggers or run DDL.
+      PAYASSIST_DB_USERNAME: payassist_app
+      PAYASSIST_DB_PASSWORD: ${PAYASSIST_DB_APP_PASSWORD:?Run scripts/add-app-db-password.ps1}
+      SPRING_FLYWAY_ENABLED: "false"       # migrations run in the migrate job, as the schema owner
       PAYASSIST_PUBLIC_BASE_URL: http://localhost:3000
       PAYASSIST_COOKIE_SECURE: "false"     # plain HTTP on localhost; must be true behind TLS
       KEYCLOAK_ISSUER_URI: http://localhost:8180/realms/payassist
@@ -69,6 +91,8 @@ services:
       KEYCLOAK_CLIENT_ID: payassist-bff
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       keycloak:

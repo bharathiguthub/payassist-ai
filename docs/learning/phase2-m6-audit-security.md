@@ -63,3 +63,16 @@ must always be able to sign out). Wrong passwords happen inside Keycloak, which 
   not depend on model behaviour.
 - **Audit data is evaluation data**: structured, correlated rows (`correlation_id`) later join Langfuse traces to
   reconstruct what an agent did and why.
+
+## 9. Least privilege in the database (M6.3)
+Detection (the chain) is paired with **prevention**: the backend no longer connects as the schema owner.
+- **Two identities**: the owner migrates (one-off `migrate` job) and leaves; the long-running app is `payassist_app`.
+  An attacker who takes over the app process gets only the runtime role's password.
+- **Grant what the code uses, nothing else** (V8): SELECT/INSERT on history, column-level UPDATE on `payments`
+  (status only moves; amounts never change), no DELETE/TRUNCATE anywhere, nothing `WITH GRANT OPTION`.
+- **Defence in depth**: for the app, an audit UPDATE fails with *permission denied* (layer 1); for the owner, the
+  append-only trigger refuses it (layer 2); if an owner disables the trigger, the hash chain reveals it (layer 3).
+- **Prove it with tests**: `RuntimeRolePrivilegesIT` runs 32 forbidden statements (plus GRANT attempts) as the app role, and every other
+  integration test runs as that role, so a missing grant fails the build rather than production.
+- AI angle: the same pattern applies to agent tools: each tool gets its own narrowly scoped credential, and the model
+  never sees credentials at all.

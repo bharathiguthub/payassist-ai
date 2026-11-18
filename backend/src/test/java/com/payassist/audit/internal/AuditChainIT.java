@@ -164,6 +164,17 @@ class AuditChainIT {
     }
 
     @Test
+    void appendOnlyTriggersStopEvenTheOwnerUnlessDisabledFirst() {
+        // The runtime role is refused by privileges (RuntimeRolePrivilegesIT); the owner is refused by the triggers.
+        long id = insert("agent.alice", "sub-alice", "VIEW", "PAY-000009", null, "2026-11-16T12:00:00Z");
+        assertThatThrownBy(() -> jdbc.update("update audit_events set actor = 'x' where id = ?", id))
+                .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> jdbc.update("delete from audit_events where id = ?", id))
+                .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> jdbc.execute("truncate audit_events")).hasMessageContaining("append-only");
+    }
+
+    @Test
     void modifiedChainedRowIsDetected() {
         insert("agent.alice", "sub-alice", "VIEW", "PAY-000005", null, "2026-11-16T12:00:00Z");
         long id = insert("agent.alice", "sub-alice", "VIEW", "PAY-000006", null, "2026-11-16T12:00:01Z");

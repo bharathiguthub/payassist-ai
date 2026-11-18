@@ -19,3 +19,6 @@ Thumbs.db
 
 # TypeScript incremental build info (generated)
 *.tsbuildinfo
+
+# Local database backups (synthetic data, never committed)
+backups/

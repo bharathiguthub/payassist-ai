@@ -167,7 +167,9 @@ class InvestigationApiIT {
     }
 
     @Test
-    void auditTrailCannotBeModified() {
+    void auditTrailCannotBeModifiedByTheApplication() {
+        // First layer: the runtime role has no UPDATE/DELETE privilege (V8). The append-only trigger (V3) is the second
+        // layer, for the schema owner; AuditChainIT covers it.
         Long id = jdbc.queryForObject("select min(id) from audit_events", Long.class);
         if (id == null) {
             jdbc.update("insert into audit_events (occurred_at, actor, action, resource_type, resource_id) "
@@ -176,9 +178,13 @@ class InvestigationApiIT {
         }
         Long auditId = id;
         assertThatThrownBy(() -> jdbc.update("update audit_events set actor = 'someone-else' where id = ?", auditId))
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+                .isInstanceOf(DataAccessException.class)
+                .satisfies(e -> assertThat(((DataAccessException) e).getMostSpecificCause().getMessage())
+                        .contains("permission denied"));
         assertThatThrownBy(() -> jdbc.update("delete from audit_events where id = ?", auditId))
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+                .isInstanceOf(DataAccessException.class)
+                .satisfies(e -> assertThat(((DataAccessException) e).getMostSpecificCause().getMessage())
+                        .contains("permission denied"));
     }
 
     private Map<String, Object> latestAudit(String ref, String action) {

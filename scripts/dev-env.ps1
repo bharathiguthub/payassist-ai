@@ -20,8 +20,13 @@ $db = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { 'payassist' }
 $env:SPRING_PROFILES_ACTIVE    = 'dev'
 $port = if ($env:POSTGRES_HOST_PORT) { $env:POSTGRES_HOST_PORT } else { '5433' }
 $env:PAYASSIST_DB_URL          = "jdbc:postgresql://localhost:${port}/$db"
-$env:PAYASSIST_DB_USERNAME     = $env:POSTGRES_USER
-$env:PAYASSIST_DB_PASSWORD     = $env:POSTGRES_PASSWORD
+# The app connects as the restricted runtime role; Flyway (inside the host-run app) uses the schema owner (ADR 0013).
+# Host-run needs the role's login enabled once: docker compose up -d postgres keycloak migrate
+if (-not $env:PAYASSIST_DB_APP_PASSWORD) { throw "PAYASSIST_DB_APP_PASSWORD missing in .env. Run scripts/add-app-db-password.ps1." }
+$env:PAYASSIST_DB_USERNAME     = 'payassist_app'
+$env:PAYASSIST_DB_PASSWORD     = $env:PAYASSIST_DB_APP_PASSWORD
+$env:SPRING_FLYWAY_USER        = $env:POSTGRES_USER
+$env:SPRING_FLYWAY_PASSWORD    = $env:POSTGRES_PASSWORD
 $env:PAYASSIST_PUBLIC_BASE_URL = 'http://localhost:5173'   # Vite dev server is the public origin
 $env:PAYASSIST_COOKIE_SECURE   = 'false'
 $env:KEYCLOAK_ISSUER_URI       = 'http://localhost:8180/realms/payassist'

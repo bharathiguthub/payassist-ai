@@ -117,6 +117,7 @@ Run only the infrastructure in Docker, and the backend and frontend on Windows:
 # Terminal 1: infrastructure
 cd C:\Projects\payassist-ai
 docker compose up -d --wait postgres keycloak
+docker compose up --no-deps migrate   # once per new migration: Flyway as schema owner + enables payassist_app login
 
 # Terminal 2: backend on http://localhost:8080
 cd C:\Projects\payassist-ai
@@ -223,6 +224,9 @@ startup fails rather than running insecurely.
 
 ## 8. Security notes
 
+- The backend connects to PostgreSQL as the restricted role `payassist_app`; the schema owner is used only by the one-off
+  `migrate` job. Existing `.env` files from before milestone 6.3 need `scripts/add-app-db-password.ps1` once. Apply,
+  rotate and roll back: [docs/runbooks/runtime-db-role.md](docs/runbooks/runtime-db-role.md).
 - Synthetic data only: no real customers, payments, card numbers or bank details.
 - `.env` holds **local development** secrets only and is git-ignored. Production secrets belong in a
   secrets manager.

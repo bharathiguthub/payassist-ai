@@ -30,10 +30,12 @@ npx vitest run src/App.test.tsx -t "blocks a care agent"
 # Full stack (from repo root)
 .\scripts\new-dev-env.ps1                         # creates .env with random secrets (once)
 docker compose up -d --build --wait               # app at http://localhost:3000
+docker compose up -d --build --no-deps --wait backend frontend   # redeploy app only (run the migrate job first if
+                                                  # there are new migrations: see docs/runbooks/runtime-db-role.md)
 .\scripts\smoke-test.ps1                          # real Keycloak login + RBAC/CSRF/logout E2E checks
 docker compose up -d --force-recreate --wait keycloak   # re-import realm after editing realm JSON or .env
 
-# Host-run dev: docker compose up -d postgres keycloak; then `. .\scripts\dev-env.ps1` and
+# Host-run dev: docker compose up -d postgres keycloak migrate; then `. .\scripts\dev-env.ps1` and
 # `.\mvnw.cmd spring-boot:run` in backend\, and `npm run dev` in frontend\ (http://localhost:5173)
 ```
 
@@ -41,6 +43,8 @@ Surefire runs `*Test.java`; Failsafe runs `*IT.java`. Integration tests use `@In
 (`backend/src/test/java/com/payassist/support/`), which starts `pgvector/pgvector:0.8.7-pg17`.
 Tests that **commit** writes use `@MutatingIntegrationTest` instead (separate context and container), so
 read-only ITs can keep asserting exact seed counts; each mutating test picks payments no other test uses.
+ITs run the application as the restricted role `payassist_app` (Flyway as the container superuser); `support/OwnerJdbc`
+is a test-only owner connection for asserting the append-only triggers.
 
 ## Architecture essentials
 
@@ -113,6 +117,9 @@ Free text goes through `shared.TextGuard`; never put note text in audit details;
 PayAssist never computes dispute deadlines or encodes network reason-code schemes.
 
 **Data**: Flyway owns the schema (`ddl-auto=validate`). Add schema changes as new `db/migration/V<n>__*.sql`.
+Two DB credentials (ADR 0013, V8): the schema owner runs Flyway only (Compose `migrate` job, `DatabaseMigrator`); the
+backend connects as `payassist_app` (SELECT/INSERT, a few UPDATEs, never DELETE/TRUNCATE/DDL, owns nothing). **A new
+table needs explicit GRANTs to `payassist_app` in its migration**, and `RuntimeRolePrivilegesIT` lists the exact grants.
 Synthetic seed data is the repeatable `db/seed/R__synthetic_seed_data.sql`, loaded only by the `dev`
 profile (`application-dev.yml`) and the `test` profile. Integration tests assert exact seed counts
 (40 customers, 400 payments). pgvector is available in the image, but `CREATE EXTENSION vector` is

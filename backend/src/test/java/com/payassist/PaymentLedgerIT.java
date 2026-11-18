@@ -11,6 +11,7 @@ import com.payassist.payment.RecordPaymentEvent;
 import com.payassist.shared.Actor;
 import com.payassist.shared.DomainException;
 import com.payassist.shared.InvalidStateTransitionException;
+import com.payassist.support.OwnerJdbc;
 import com.payassist.support.MutatingIntegrationTest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -41,6 +42,9 @@ class PaymentLedgerIT {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private OwnerJdbc owner;
 
     @Test
     void fullLifecycleIsRecordedInOrderAndBumpsTheVersion() {
@@ -91,15 +95,24 @@ class PaymentLedgerIT {
                 select e.id::text from payment_events e join payments p on p.id = e.payment_id
                 where p.payment_ref = ? order by e.sequence_no limit 1""", String.class, ref);
 
-        assertThatThrownBy(() -> jdbc.update("update payment_events set reason_code = 'X' where id = ?::uuid", eventId))
+        // Layer 1: the application role has no UPDATE/DELETE/TRUNCATE privilege on history.
+        for (String sql : new String[] {"update payment_events set reason_code = 'X'", "delete from payment_events",
+                "truncate payment_events"}) {
+            assertThatThrownBy(() -> jdbc.execute(sql)).isInstanceOf(DataAccessException.class)
+                    .satisfies(e -> assertThat(((DataAccessException) e).getMostSpecificCause().getMessage())
+                            .contains("permission denied"));
+        }
+        // Layer 2: the append-only triggers stop even the schema owner.
+        JdbcTemplate ownerJdbc = owner.template();
+        assertThatThrownBy(() -> ownerJdbc.update("update payment_events set reason_code = 'X' where id = ?::uuid", eventId))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
-        assertThatThrownBy(() -> jdbc.update("delete from payment_events where id = ?::uuid", eventId))
+        assertThatThrownBy(() -> ownerJdbc.update("delete from payment_events where id = ?::uuid", eventId))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
         // Since V5, refund_decisions references payment_events, so PostgreSQL refuses a plain TRUNCATE even
         // before the trigger runs; with CASCADE the append-only trigger itself refuses it.
         long rows = jdbc.queryForObject("select count(*) from payment_events", Long.class);
-        assertThatThrownBy(() -> jdbc.execute("truncate payment_events")).isInstanceOf(DataAccessException.class);
-        assertThatThrownBy(() -> jdbc.execute("truncate payment_events cascade"))
+        assertThatThrownBy(() -> ownerJdbc.execute("truncate payment_events")).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> ownerJdbc.execute("truncate payment_events cascade"))
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
         assertThat(jdbc.queryForObject("select count(*) from payment_events", Long.class)).isEqualTo(rows);
     }

@@ -62,10 +62,24 @@ if a state-changing endpoint is added without an audit action.
 `HumanOnlyActionsArchitectureTest` (ArchUnit): only web controllers and the implementing internal packages may depend
 on `RefundApprovals` or `DisputeResolutions`; tool-ready interfaces may not extend them.
 
-### 7. Least-privilege database access (decision 2)
-Planned as milestone 6.3: Flyway runs as the schema owner, the application as a runtime role with only the DML it
-needs (SELECT/INSERT on append-only tables), no DDL, no TRUNCATE and no ownership, so it cannot disable triggers.
-Applied after the impact and rollback plan has been reviewed.
+### 7. Least-privilege database access (decision 2, milestone 6.3)
+- **Two credentials.** The schema owner (`POSTGRES_USER`) is used only by Flyway, in the one-off `migrate` Compose job
+  (`DatabaseMigrator`), which exits afterwards. The long-running backend connects as `payassist_app` and has
+  `SPRING_FLYWAY_ENABLED=false`, so it never holds the owner password.
+- **V8 grants exactly the DML the code uses**: SELECT on `customers`; SELECT + column-level UPDATE
+  (`status`, `failure_reason`, `updated_at`, `version`) on `payments`; SELECT + INSERT on the six append-only tables;
+  SELECT + INSERT + UPDATE on `refund_requests` and `dispute_cases`; USAGE on sequences. Never DELETE, TRUNCATE,
+  TRIGGER, REFERENCES, nothing WITH GRANT OPTION, no role attributes, owns nothing. `Payment` maps the immutable
+  payment facts `updatable = false` to match.
+- Consequently the runtime role cannot run DDL, disable or drop triggers, replace functions, set
+  `session_replication_role`, rewrite history or widen its privileges (`RuntimeRolePrivilegesIT`: 32 refused statements, 3 ineffective GRANTs,
+  exact-grant and role-attribute checks).
+  The append-only triggers stay as the second layer for the owner.
+- Every function owned by the schema owner gets a pinned `search_path` (`pg_catalog, public`).
+- The role is created NOLOGIN in V8; `DatabaseMigrator` enables LOGIN with `PAYASSIST_DB_APP_PASSWORD` from the
+  git-ignored `.env`, so no secret is part of a migration. Integration tests run the whole application as this role.
+- New tables must be granted explicitly in their migration. Operations: [runbook](../runbooks/runtime-db-role.md)
+  (apply, rotate, roll back, restore).
 
 ## Consequences
 - Detects any edit/deletion inside the chain or of historical rows made with owner rights; does not prevent it.
