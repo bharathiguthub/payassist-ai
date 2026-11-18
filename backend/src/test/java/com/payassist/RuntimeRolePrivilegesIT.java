@@ -64,6 +64,7 @@ class RuntimeRolePrivilegesIT {
                 from information_schema.role_table_grants where grantee = current_user and table_schema = 'public'
                 group by table_name order by table_name""", String.class))
                 .containsExactly(
+                        "audit_checkpoint_runs:SELECT",
                         "audit_events:INSERT,SELECT",
                         "customers:SELECT",
                         "dispute_case_events:INSERT,SELECT",
@@ -163,6 +164,10 @@ class RuntimeRolePrivilegesIT {
             "update dispute_cases set payment_ref = 'PAY-000001'",
             "delete from refund_requests",
             "truncate dispute_cases",
+            // Checkpoint status is written only by the checkpoint job (V10)
+            "insert into audit_checkpoint_runs (mode, result, checkpoints, appended) values ('VERIFY', 'OK', 1, false)",
+            "update audit_checkpoint_runs set result = 'OK'",
+            "delete from audit_checkpoint_runs",
             // Temporary objects (V9)
             "create temp table evil (id int)",
             "create temporary view evil as select 1",

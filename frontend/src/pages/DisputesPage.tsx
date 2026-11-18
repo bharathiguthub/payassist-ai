@@ -1,8 +1,8 @@
+import { EmptyState, Loading, ProblemMessage } from '../components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { apiFetch } from '../api/client';
-import { describeApiError } from '../api/problems';
 import { DISPUTE_STATUSES, type DisputeStatus, type DisputeSummary, type Page } from '../api/types';
 import { DisputeStatusBadge, OverdueBadge } from '../components/DisputeStatusBadge';
 import { formatAmount, formatDateTime, humanize } from '../format';
@@ -114,13 +114,11 @@ export function DisputesPage({
         )}
       </form>
 
-      {isPending && <p>Loading dispute cases…</p>}
+      {isPending && <Loading label="Loading dispute cases" />}
       {error && (
-        <p className="error" role="alert">
-          Could not load dispute cases: {describeApiError(error)}
-        </p>
+        <ProblemMessage error={error} prefix="Could not load dispute cases" />
       )}
-      {data && data.content.length === 0 && <p className="muted">No dispute cases match.</p>}
+      {data && data.content.length === 0 && <EmptyState>No dispute cases match.</EmptyState>}
       {data && data.content.length > 0 && (
         <div className="card table-wrap">
           <table aria-label="Dispute cases">

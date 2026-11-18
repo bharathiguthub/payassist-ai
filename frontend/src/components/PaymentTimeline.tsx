@@ -1,3 +1,4 @@
+import { EmptyState, Loading } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '../api/client';
 import type { PaymentTimeline as Timeline, TimelineEntry } from '../api/types';
@@ -20,7 +21,7 @@ export function PaymentTimeline({ paymentRef }: { paymentRef: string }) {
   return (
     <section className="card" aria-labelledby="timeline-heading">
       <h2 id="timeline-heading">Timeline</h2>
-      {isPending && <p>Loading timeline…</p>}
+      {isPending && <Loading label="Loading timeline" />}
       {error && (
         <p className="error" role="alert">
           {error instanceof ApiError && error.status === 403
@@ -28,7 +29,7 @@ export function PaymentTimeline({ paymentRef }: { paymentRef: string }) {
             : `Could not load the timeline: ${error.message}`}
         </p>
       )}
-      {data && data.events.length === 0 && <p className="muted">No events have been recorded for this payment.</p>}
+      {data && data.events.length === 0 && <EmptyState>No events have been recorded for this payment.</EmptyState>}
       {data && data.events.length > 0 && (
         <ol className="timeline" aria-label={`Events for ${data.paymentRef}, oldest first`}>
           {data.events.map((e) => (

@@ -59,8 +59,12 @@ describe('DisputeCasePage', () => {
 
     await userEvent.selectOptions(await screen.findByLabelText('Outcome reported by the bank or network'), 'LOST');
     await userEvent.click(screen.getByRole('button', { name: 'Record outcome' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Record outcome Lost for DSP-0123456789AB?' });
+    expect(dialog).toHaveTextContent('charged back');
+    expect(sent).toBeUndefined();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Record outcome' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Case is now won.');
+    expect(await screen.findByText('Case is now won.')).toBeInTheDocument();
     expect(sent).toEqual({ body: { outcome: 'LOST', expectedVersion: 5 }, csrf: 'csrf-cookie-value' });
   });
 
@@ -98,7 +102,44 @@ describe('DisputeCasePage', () => {
     renderCase(disputeView({ status: 'PENDING_REVIEW', allowedActions: ['APPROVE_SUBMISSION'] }));
 
     await userEvent.click(await screen.findByRole('button', { name: 'Approve evidence submission' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('(SELF_REVIEW_FORBIDDEN)');
+    await userEvent.click(screen.getByRole('button', { name: 'Approve submission' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('You cannot approve a review you requested yourself');
+    expect(alert).toHaveTextContent('(SELF_REVIEW_FORBIDDEN)');
+  });
+
+  it('shows a closed case as final with who closed it and no actions', async () => {
+    const base = disputeView({});
+    renderCase(
+      disputeView({
+        status: 'WITHDRAWN',
+        allowedActions: [],
+        history: [
+          ...base.history,
+          { ...base.history[0]!, sequenceNo: 9, eventType: 'WITHDRAWN', fromStatus: 'OPEN', toStatus: 'WITHDRAWN', actor: 'tara.supervisor' },
+        ],
+      }),
+    );
+    const banner = await screen.findByRole('note', { name: '' });
+    expect(banner).toHaveTextContent('This case is closed (Withdrawn) and final.');
+    expect(banner).toHaveTextContent('Recorded by tara.supervisor');
+    expect(screen.getByText('No actions: the case is closed.')).toBeInTheDocument();
+  });
+
+  it('cancels a withdrawal in the confirmation dialog without sending it', async () => {
+    let called = false;
+    server.use(
+      http.post(`${URL}/withdraw`, () => {
+        called = true;
+        return HttpResponse.json(disputeView({ status: 'WITHDRAWN' }));
+      }),
+    );
+    renderCase(disputeView({ allowedActions: ['WITHDRAW'] }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Record withdrawal' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('The decision is final');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(called).toBe(false);
   });
 
   it('warns about pending refunds that cannot be approved during the dispute', async () => {

@@ -25,6 +25,13 @@ queryClient.getQueryCache().subscribe((event) => {
     void queryClient.invalidateQueries({ queryKey: ['me'] });
   }
 });
+// The same for form submissions (refund requests, approvals, dispute actions).
+queryClient.getMutationCache().subscribe((event) => {
+  const error = event.mutation?.state.error;
+  if (event.type === 'updated' && error instanceof ApiError && error.status === 401) {
+    void queryClient.invalidateQueries({ queryKey: ['me'] });
+  }
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -40,6 +40,14 @@ Every line covers the previous line's MAC, so the ledger is a chain of its own.
 Output example: `Audit checkpoint create: OK | checkpoints=3 | head=#180 9f2c41d0a1b2c3d4… | appended`.
 Exit codes: `0` OK, `2` integrity failure, `1` configuration error. The key and passwords are never printed.
 
+## Status in the admin UI (milestone 7)
+Every run (verify or create) is also recorded in `audit_checkpoint_runs` (time, mode, result, reason code, number of
+checkpoints, newest checkpointed chain row, a 16-character hash prefix). The Audit log page shows it under
+**External checkpoints — reported**, next to the in-app **Database audit chain** verification, with warnings for a
+failed last run, no checkpoint, a checkpoint older than 24 h (`payassist.audit.checkpoint-stale-after`) or no recent
+successful verification. The panel is a reported status: the proof is only re-established by running this tool. If a
+run cannot write its status row, the tool prints a warning and the panel turns stale.
+
 ## What is verified (both modes)
 1. **Ledger**: line numbers 1..n, each `prevMac` equals the previous `mac`, every MAC recomputes, heads never go
    backwards. Failures: `LEDGER_MALFORMED_LINE`, `LEDGER_SEQUENCE_BROKEN`, `LEDGER_LINK_BROKEN`,

@@ -25,3 +25,7 @@ backups/
 
 # External audit-chain checkpoint ledger (ADR 0013): outside git and outside PostgreSQL
 audit-checkpoints/
+
+# Playwright (browser tests): HTML report and failure screenshots
+frontend/playwright-report/
+frontend/test-results/

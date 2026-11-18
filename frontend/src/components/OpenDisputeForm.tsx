@@ -11,7 +11,7 @@ import { humanize } from '../format';
  * Opens a dispute case for a bank / card-network / wallet-provider dispute. The response deadline is optional and is
  * entered exactly as given in the notification (interpreted as UTC); PayAssist never computes one.
  */
-export function OpenDisputeForm({ paymentRef }: { paymentRef: string }) {
+export function OpenDisputeForm({ paymentRef, onOpened }: { paymentRef: string; onOpened?: () => void }) {
   const queryClient = useQueryClient();
   const idempotency = useIdempotencyKey();
   const [category, setCategory] = useState<DisputeReasonCategory>('PRODUCT_NOT_RECEIVED');
@@ -28,6 +28,7 @@ export function OpenDisputeForm({ paymentRef }: { paymentRef: string }) {
       }),
     onSuccess: () => {
       idempotency.reset();
+      onOpened?.(); // lets the page keep this confirmation visible after the payment becomes DISPUTED
       void queryClient.invalidateQueries({ queryKey: ['payment', paymentRef] });
       void queryClient.invalidateQueries({ queryKey: ['investigation-summary', paymentRef] });
       void queryClient.invalidateQueries({ queryKey: ['payment-timeline', paymentRef] });

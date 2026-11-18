@@ -1,8 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { EmptyState, Loading, ProblemMessage } from '../components/ui';
+import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { apiFetch } from '../api/client';
-import { describeApiError } from '../api/problems';
-import type { AuditEvent, AuditIntegrityReport, Page } from '../api/types';
+import { AuditIntegrityPanel } from '../components/AuditIntegrityPanel';
+import type { AuditEvent, Page } from '../api/types';
 import { formatDateTime } from '../format';
 
 interface Filters {
@@ -53,10 +54,6 @@ export function AuditPage() {
     queryFn: () => apiFetch<Page<AuditEvent>>(toUrl(filters, page)),
   });
 
-  const integrity = useMutation({
-    mutationFn: () => apiFetch<AuditIntegrityReport>('/api/v1/admin/audit-events/integrity'),
-  });
-
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     const next = {
@@ -79,17 +76,7 @@ export function AuditPage() {
         Every search and integrity check on this page is itself recorded in the audit log.
       </p>
 
-      <div className="card">
-        <button type="button" onClick={() => integrity.mutate()} disabled={integrity.isPending}>
-          {integrity.isPending ? 'Verifying…' : 'Verify integrity'}
-        </button>
-        {integrity.error && (
-          <p className="error" role="alert">
-            Could not verify the audit trail: {describeApiError(integrity.error)}
-          </p>
-        )}
-        {integrity.data && <IntegrityResult report={integrity.data} />}
-      </div>
+      <AuditIntegrityPanel />
 
       <form className="search card" onSubmit={onSubmit} noValidate>
         <label>
@@ -121,16 +108,14 @@ export function AuditPage() {
         )}
       </form>
 
-      {isPending && <p>Loading…</p>}
+      {isPending && <Loading label="Loading audit events" />}
       {error && (
-        <p className="error" role="alert">
-          Could not load audit events: {describeApiError(error)}
-        </p>
+        <ProblemMessage error={error} prefix="Could not load audit events" />
       )}
       {data && (
         <div className="card table-wrap">
           {data.content.length === 0 ? (
-            <p className="muted">No audit events match.</p>
+            <EmptyState>No audit events match.</EmptyState>
           ) : (
             <table aria-label="Audit events">
               <thead>
@@ -202,26 +187,3 @@ export function AuditPage() {
   );
 }
 
-function IntegrityResult({ report }: { report: AuditIntegrityReport }) {
-  if (report.result === 'VALID') {
-    return (
-      <p role="status">
-        <span className="badge badge-success">Chain intact</span> {report.chainedRows} chained and {report.legacyRows}{' '}
-        legacy rows verified at {formatDateTime(report.checkedAt)}. Head #{report.headChainSeq}{' '}
-        <code title={report.headRowHash ?? undefined}>{report.headRowHash?.slice(0, 16)}…</code>
-        <span className="block muted small">
-          Keep the head number and hash elsewhere: removal of the newest rows is only detectable against such a
-          checkpoint.
-        </span>
-      </p>
-    );
-  }
-  const failure = report.firstFailure;
-  return (
-    <p role="alert" className="error">
-      <span className="badge badge-danger">Chain broken</span> {failure?.reason}
-      {failure?.auditEventId != null && <> at audit event {failure.auditEventId}</>}. Escalate to security; do not
-      modify the audit table.
-    </p>
-  );
-}

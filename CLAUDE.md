@@ -26,6 +26,7 @@ pushing to GitHub; never deploy to paid cloud services without approval.
 # Frontend (from frontend\)
 npm test ; npm run lint ; npm run build           # build = tsc -b + vite build
 npx vitest run src/App.test.tsx -t "blocks a care agent"
+npm run e2e                                       # Playwright (Chromium) against the running Docker stack, real Keycloak
 
 # Full stack (from repo root)
 .\scripts\new-dev-env.ps1                         # creates .env with random secrets (once)
@@ -136,6 +137,11 @@ deliberately deferred to the RAG phase.
 
 ## Gotchas
 
+- Frontend errors go through `api/problems.ts` (`classifyApiError`) and `<ProblemMessage>`; final decisions go through
+  `<ConfirmDialog>`. Buttons follow the server's `allowedActions`; never infer permissions in the UI.
+- Browser tests (`frontend/e2e`) run against the dev stack and write synthetic data on the reserved payments in
+  `e2e/support.ts` (refund pool approved 1.00 per run; dispute pool taken to WON). Keep other tests off those payments.
+  Playwright traces/videos stay off (they would capture the typed demo password).
 - A native PostgreSQL on this machine occupies 5432; Compose maps the container to `POSTGRES_HOST_PORT` (default 5433).
 - Keycloak 26 user-profile validation rejects characters such as `(` `)` in first/last names. Invalid
   realm users get stuck on a VERIFY_PROFILE page at login.

@@ -18,3 +18,20 @@
   already supports it, but nginx will need `proxy_buffering off` for those routes.
 - `frontend/.npmrc` sets `legacy-peer-deps=true` to work around an npm 11.3 resolver crash on vitest's
   optional peer dependencies.
+
+## Update — Phase 2 milestone 7 (frontend polish)
+- **One error model.** `api/problems.ts` classifies every failure (`unauthenticated`, `forbidden`, `not-permitted`,
+  `not-found`, `stale`, `protected`, `invalid`, `network`, `server`); `<ProblemMessage>` shows plain language, the
+  stable code as secondary text, a Reload or Sign-in action where it helps, and the correlation ID for server and
+  database refusals. Server text for 5xx is never shown. A 401 from a query **or a mutation** re-checks `/me`.
+- **The backend stays the authority.** Buttons follow the server's `allowedActions`; final refund and dispute states
+  are shown read-only with who decided and when; any refusal reloads the data.
+- **Confirmation dialogs** (`<ConfirmDialog>`, `role="alertdialog"`, focus kept inside, Escape cancels, focus
+  returns to the opener) for final decisions: refund approve/reject, dispute evidence approval, outcome, liability,
+  withdrawal.
+- **Accessibility baseline:** skip link, page heading focused after navigation, `aria-current` navigation, status
+  regions for loading, one `<Loading>`/`<EmptyState>` pattern, visible focus, reduced-motion support. `vitest-axe`
+  checks pages in jsdom; the browser suite runs axe-core in Chromium (including colour contrast).
+- **Browser tests:** Playwright (Chromium only) against the running Docker stack with real Keycloak logins
+  (`npm run e2e`), separate from `npm test`. No traces or videos (they would record the typed password); the password
+  is read from `.env` at run time; no session is saved to disk.

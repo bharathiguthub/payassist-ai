@@ -1,6 +1,6 @@
+import { EmptyState, Loading, ProblemMessage } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, toQuery } from '../api/client';
-import { describeApiError } from '../api/problems';
 import type { Page, RefundRequestView } from '../api/types';
 import { formatAmount, formatDateTime, humanize } from '../format';
 import { RefundStatusBadge } from './RefundStatusBadge';
@@ -16,13 +16,11 @@ export function PaymentRefundRequests({ paymentRef }: { paymentRef: string }) {
   return (
     <section className="card" aria-labelledby="payment-refunds-heading">
       <h2 id="payment-refunds-heading">Refund requests</h2>
-      {isPending && <p>Loading refund requests…</p>}
+      {isPending && <Loading label="Loading refund requests" />}
       {error && (
-        <p className="error" role="alert">
-          Could not load refund requests: {describeApiError(error)}
-        </p>
+        <ProblemMessage error={error} prefix="Could not load refund requests" />
       )}
-      {data && data.content.length === 0 && <p className="muted">No refund requests for this payment.</p>}
+      {data && data.content.length === 0 && <EmptyState>No refund requests for this payment.</EmptyState>}
       {data && data.content.length > 0 && (
         <div className="table-wrap">
           <table aria-label="Refund requests for this payment">
@@ -50,7 +48,7 @@ export function PaymentRefundRequests({ paymentRef }: { paymentRef: string }) {
                   <td>
                     {r.decision ? (
                       <>
-                        {humanize(r.decision.reasonCode)} by {r.decision.decidedBy}
+                        <span className="badge badge-neutral">Final</span> {humanize(r.decision.reasonCode)} by {r.decision.decidedBy}
                         <span className="block muted small">{formatDateTime(r.decision.decidedAt)}</span>
                       </>
                     ) : (

@@ -98,6 +98,25 @@ export interface AuditIntegrityReport {
   firstFailure: { auditEventId: number | null; chainSeq: number | null; reason: string } | null;
 }
 
+/** Reported audit-integrity status (GET /admin/audit-events/checkpoint-status). */
+export interface AuditCheckpointStatus {
+  generatedAt: string;
+  staleAfterHours: number;
+  databaseChain: { currentHeadChainSeq: number | null; lastVerifiedAt: string | null; lastResult: 'VALID' | 'BROKEN' | null };
+  externalCheckpoints: {
+    lastRunAt: string | null;
+    lastRunMode: 'VERIFY' | 'CREATE' | null;
+    lastRunResult: 'OK' | 'FAILED' | null;
+    lastRunReason: string | null;
+    lastSuccessfulRunAt: string | null;
+    checkpoints: number | null;
+    latestCheckpointHead: number | null;
+    latestCheckpointAt: string | null;
+    rowsSinceLatestCheckpoint: number | null;
+  };
+  warnings: { code: string; severity: 'DANGER' | 'WARNING'; message: string }[];
+}
+
 /** RFC 9457 Problem Details returned by the backend on errors. */
 export interface ProblemDetail {
   type?: string;
@@ -108,6 +127,8 @@ export interface ProblemDetail {
   code?: string;
   /** Eligibility reason codes behind REFUND_NOT_ELIGIBLE / REFUND_NO_LONGER_ELIGIBLE. */
   reasons?: string[];
+  /** Request ID of a server or database refusal, to quote to support. */
+  correlationId?: string;
 }
 
 // --- Phase 2: payment timeline and investigation summary -------------------------------------

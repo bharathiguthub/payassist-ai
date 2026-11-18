@@ -45,12 +45,14 @@ final class AuditDetailPolicy {
                     "reasonCode")),
             // Security
             Map.entry("ACCESS_DENIED", Set.of()),
+            Map.entry("DATA_PROTECTION_REFUSED", Set.of()),
             Map.entry("LOGIN_SUCCESS", Set.of("roles")),
             Map.entry("LOGOUT", Set.of()),
             // Audit trail itself
             Map.entry("AUDIT_LOG_VIEW", Set.of("filterActor", "filterActorSubject", "filterAction", "filterResourceType",
                     "filterResourceId", "filterOutcome", "filterCorrelationId", "filterFrom", "filterTo", "page",
                     "size", "returned")),
+            Map.entry("AUDIT_CHECKPOINT_STATUS_VIEW", Set.of("warnings")),
             Map.entry("AUDIT_INTEGRITY_CHECK", Set.of("result", "chainedRows", "legacyRows", "headChainSeq",
                     "failureAuditEventId", "failureReason")));
 

@@ -170,7 +170,8 @@ migration loaded **only** by the `dev` profile and tests.
 | M4 Refund requests and supervisor approval | Done | [ADR 0011](adr/0011-refund-requests-and-approval.md), [guide](learning/phase2-m4-refund-approval.md), [API](api.md) |
 | M5 Dispute case management | Done | [ADR 0012](adr/0012-dispute-case-management.md), [guide](learning/phase2-m5-disputes.md), [API](api.md) |
 | M6 Audit & security: hash-chained audit, login/logout + audit-of-audit events, least-privilege DB role | Done (6.1–6.4) | [runbooks](runbooks/) | [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md), [API](api.md) |
-| M7–M8 Frontend polish, docs | Planned | |
+| M7 Frontend polish: error model, final states, confirmation dialogs, accessibility, audit integrity panel, Playwright browser tests | Done | [ADR 0006](adr/0006-frontend-stack.md), [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md) §11–12, [guide](learning/phase2-m7-frontend-polish.md) |
+| M8 Documentation and hardening review | Planned | |
 
 ## 7. Security controls (Phase 1)
 
@@ -191,7 +192,7 @@ migration loaded **only** by the `dev` profile and tests.
 | Clickjacking | `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'` |
 | Log injection / traceability | Correlation IDs validated before logging; per-request ID in every log line |
 | Accountability | Audit of every sensitive read and every write, logins/logouts and reads of the audit log itself (ADMIN only) |
-| Audit tampering | Append-only triggers; SHA-256 hash chain from V7 with a genesis anchor pinning older rows; on-demand verification; HMAC-signed external checkpoints outside PostgreSQL detect tail removal and full-chain rewrites ([checkpoint runbook](runbooks/audit-checkpoints.md), [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md)) |
+| Audit tampering | Append-only triggers; SHA-256 hash chain from V7 with a genesis anchor pinning older rows; on-demand verification; HMAC-signed external checkpoints outside PostgreSQL detect tail removal and full-chain rewrites ([checkpoint runbook](runbooks/audit-checkpoints.md), [ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md)); admin panel shows the in-app chain verification and the job-reported checkpoint status separately |
 
 ---
 

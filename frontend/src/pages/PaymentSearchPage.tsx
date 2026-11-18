@@ -1,3 +1,4 @@
+import { Loading } from '../components/ui';
 import { useState, type FormEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
@@ -79,7 +80,7 @@ export function PaymentSearchPage() {
         )}
       </form>
 
-      {isPending && <p>Loading payments…</p>}
+      {isPending && <Loading label="Loading payments" />}
       {isError && (
         <p className="error" role="alert">
           Could not load payments: {error.message}

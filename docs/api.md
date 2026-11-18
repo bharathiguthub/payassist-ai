@@ -32,6 +32,12 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | 409 | `CONCURRENT_MODIFICATION` | Another request changed the resource first; reload and retry |
 | 403 | e.g. `SELF_APPROVAL_FORBIDDEN`, `ESCALATION_REQUIRED` | Role allowed, but a business authorization rule forbids this action |
 | 422 | e.g. `INVALID_AMOUNT_SCALE`, `UNSUPPORTED_CURRENCY`, `INVALID_AMOUNT`, `CURRENCY_REQUIRED`, `REFUND_EXCEEDS_PAYMENT_AMOUNT` | Business rule violated (malformed money is rejected, never rounded) |
+| 409 | `RECORD_PROTECTED` | The database refused the change (final decision, immutable field). Reload; never retried automatically. Carries `correlationId` |
+| 500 | `DATABASE_PERMISSION_DENIED` | The backend's database role lacks a privilege (configuration error). Carries `correlationId`; no database details |
+| 500 | — | Unexpected error; body carries `correlationId` only |
+
+Every response also has the `X-Correlation-Id` header. Error bodies never contain database messages, table or trigger
+names ([ADR 0013](adr/0013-tamper-evident-audit-and-least-privilege.md) section 11).
 
 ## Access matrix
 
@@ -50,7 +56,7 @@ and Swagger UI at `/swagger-ui.html` (login required). This file is the reviewed
 | `POST /disputes`, `/notes`, `/evidence`, `/start-investigation`, `/request-review` | ✔ | ✔ | 403 | 403 |
 | `POST /disputes/{ref}/` decisions (approve submission, outcome, liability, withdraw, return) | 403 | ✔ (SoD) | 403 | 403 |
 | `GET /payments/stats` | 403 | ✔ | ✔ | 403 |
-| `GET /admin/audit-events`, `GET /admin/audit-events/integrity` | 403 | 403 | ✔ (audited) | 403 |
+| `GET /admin/audit-events`, `/integrity`, `/checkpoint-status` | 403 | 403 | ✔ (audited) | 403 |
 
 Enforced twice: URL rules in `SecurityConfig` and `@PreAuthorize` on controllers **and** services.
 
@@ -382,3 +388,21 @@ is only detectable against such a checkpoint. Audited as `AUDIT_INTEGRITY_CHECK`
 
 **Security events**: `LOGIN_SUCCESS` (details: `roles`) and `LOGOUT`, resource `AUTHENTICATION` / `oidc:keycloak`.
 No tokens, session IDs or e-mail. Failed password attempts are recorded by Keycloak, not by PayAssist (deferred).
+
+`GET /admin/audit-events/checkpoint-status` (milestone 7) — reported audit-integrity status for the admin panel; cheap
+(no chain recomputation). Audited as `AUDIT_CHECKPOINT_STATUS_VIEW`.
+```json
+{ "generatedAt": "2026-11-18T10:00:00Z", "staleAfterHours": 24,
+  "databaseChain": { "currentHeadChainSeq": 241, "lastVerifiedAt": "2026-11-18T09:00:00Z", "lastResult": "VALID" },
+  "externalCheckpoints": { "lastRunAt": "…", "lastRunMode": "CREATE", "lastRunResult": "OK", "lastRunReason": null,
+    "lastSuccessfulRunAt": "…", "checkpoints": 4, "latestCheckpointHead": 233, "latestCheckpointAt": "…",
+    "rowsSinceLatestCheckpoint": 8 },
+  "warnings": [ { "code": "CHECKPOINT_STALE", "severity": "WARNING", "message": "…" } ] }
+```
+`databaseChain` comes from the latest in-app `/integrity` run; `externalCheckpoints` is **reported** by the checkpoint
+job (`audit_checkpoint_runs`), not verified by the backend. Warning codes: `DB_CHAIN_BROKEN`, `LAST_RUN_FAILED`
+(DANGER, listed first), `DB_CHAIN_NOT_VERIFIED`, `NO_CHECKPOINT`, `CHECKPOINT_STALE`, `NOT_VERIFIED_RECENTLY`. Messages
+are fixed texts; no key, MAC, ledger path or full hash is returned.
+
+**Database refusals**: `DATA_PROTECTION_REFUSED` (outcome DENIED, details `code`), resource `ENDPOINT` /
+`<METHOD> <path>`.

@@ -30,8 +30,13 @@ describe('RefundApprovalsPage', () => {
     renderWithProviders(<RefundApprovalsPage />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Approve RFD-0123456789AB' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Approve RFD-0123456789AB?' });
+    expect(dialog).toHaveTextContent('cannot be undone');
+    expect(sent).toBeUndefined(); // nothing is sent before confirmation
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve refund' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('RFD-0123456789AB approved.');
+    expect(await screen.findByText('RFD-0123456789AB approved.')).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(sent).toEqual({ body: { expectedVersion: 3 }, csrf: 'csrf-cookie-value' });
   });
 
@@ -50,8 +55,9 @@ describe('RefundApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Rejection reason for RFD-0123456789AB'), 'ESCALATION_NOT_AVAILABLE');
     await userEvent.click(screen.getByRole('button', { name: 'Reject RFD-0123456789AB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reject refund' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('RFD-0123456789AB rejected.');
+    expect(await screen.findByText('RFD-0123456789AB rejected.')).toBeInTheDocument();
     expect(body).toEqual({ reason: 'ESCALATION_NOT_AVAILABLE', expectedVersion: 0 });
   });
 
@@ -82,10 +88,70 @@ describe('RefundApprovalsPage', () => {
     renderWithProviders(<RefundApprovalsPage />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Approve RFD-0123456789AB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Approve refund' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Decision not recorded: A refund request cannot be approved by the person who requested it (SELF_APPROVAL_FORBIDDEN)',
+      'Decision not recorded: You cannot decide on a refund you requested yourself. Another supervisor must decide. (SELF_APPROVAL_FORBIDDEN)',
     );
+  });
+
+  it('cancels a decision with Escape without sending anything', async () => {
+    queue(refundRequest());
+    let called = false;
+    server.use(
+      http.post('/api/v1/refunds/RFD-0123456789AB/approve', () => {
+        called = true;
+        return HttpResponse.json(refundRequest({ status: 'APPROVED' }));
+      }),
+    );
+    renderWithProviders(<RefundApprovalsPage />);
+
+    const approve = await screen.findByRole('button', { name: 'Approve RFD-0123456789AB' });
+    await userEvent.click(approve);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(approve).toHaveFocus();
+    expect(called).toBe(false);
+  });
+
+  it('explains a decision that was overtaken and offers a reload', async () => {
+    queue(refundRequest());
+    server.use(
+      http.post('/api/v1/refunds/RFD-0123456789AB/approve', () =>
+        HttpResponse.json({ status: 409, title: 'Concurrent modification', code: 'CONCURRENT_MODIFICATION' }, { status: 409 }),
+      ),
+    );
+    renderWithProviders(<RefundApprovalsPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve RFD-0123456789AB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Approve refund' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Someone else changed this record');
+    expect(within(alert).getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+    expect(alert).toHaveFocus();
+  });
+
+  it('shows a database refusal with its support reference but no database details', async () => {
+    queue(refundRequest());
+    server.use(
+      http.post('/api/v1/refunds/RFD-0123456789AB/approve', () =>
+        HttpResponse.json(
+          { status: 409, title: 'Record protected', code: 'RECORD_PROTECTED', correlationId: 'cid-0001-abcd' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderWithProviders(<RefundApprovalsPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve RFD-0123456789AB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Approve refund' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This record is protected');
+    expect(alert).toHaveTextContent('Reference: cid-0001-abcd');
   });
 
   it('shows an empty queue', async () => {

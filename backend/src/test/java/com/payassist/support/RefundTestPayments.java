@@ -29,6 +29,10 @@ public final class RefundTestPayments {
     public static final String ESCALATION = "PAY-000249";           // CARD   2223.31 USD (limit 1250)
     public static final String ROLES = "PAY-000199";                // BANK_TRANSFER 763.81 EUR (full refunds only)
 
+    // DataProtectionRefusalIT (WALLET, INR): database-level refusals surfaced as stable problem codes
+    public static final String PERMISSION_REFUSAL = "PAY-000026"; // 2063.94 INR
+    public static final String GUARD_REFUSAL = "PAY-000050";      // 1464.50 INR
+
     private RefundTestPayments() {
     }
 

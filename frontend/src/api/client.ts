@@ -9,15 +9,25 @@ import type { ProblemDetail } from './types';
 export const CSRF_COOKIE = 'XSRF-TOKEN';
 export const CSRF_HEADER = 'X-XSRF-TOKEN';
 
+export const CORRELATION_HEADER = 'X-Correlation-Id';
+
+/** An HTTP failure (status 0 = the request never reached the server). */
 export class ApiError extends Error {
   readonly status: number;
   readonly problem: ProblemDetail | undefined;
+  /** Server request ID, to quote to support; never sensitive. */
+  readonly correlationId: string | undefined;
 
-  constructor(status: number, problem?: ProblemDetail) {
-    super(problem?.detail ?? problem?.title ?? `Request failed with status ${status}`);
+  constructor(status: number, problem?: ProblemDetail, correlationId?: string) {
+    super(
+      problem?.detail ??
+        problem?.title ??
+        (status === 0 ? 'The server could not be reached' : `Request failed with status ${status}`),
+    );
     this.name = 'ApiError';
     this.status = status;
     this.problem = problem;
+    this.correlationId = problem?.correlationId ?? correlationId;
   }
 }
 
@@ -41,7 +51,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     if (token) headers.set(CSRF_HEADER, token);
   }
 
-  const response = await fetch(path, { ...init, method, headers, credentials: 'same-origin' });
+  let response: Response;
+  try {
+    response = await fetch(path, { ...init, method, headers, credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(0); // offline, DNS, CORS or connection reset: no response at all
+  }
 
   if (!response.ok) {
     let problem: ProblemDetail | undefined;
@@ -50,7 +65,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     } catch {
       problem = undefined;
     }
-    throw new ApiError(response.status, problem);
+    throw new ApiError(response.status, problem, response.headers?.get(CORRELATION_HEADER) ?? undefined);
   }
   return (await response.json()) as T;
 }

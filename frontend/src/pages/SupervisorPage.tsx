@@ -1,3 +1,4 @@
+import { Loading } from '../components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import type { PaymentStats } from '../api/types';
@@ -12,7 +13,7 @@ export function SupervisorPage() {
   return (
     <section>
       <h1>Supervisor overview</h1>
-      {isPending && <p>Loading…</p>}
+      {isPending && <Loading label="Loading statistics" />}
       {error && (
         <p className="error" role="alert">
           Could not load statistics: {error.message}

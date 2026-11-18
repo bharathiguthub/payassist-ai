@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { apiFetch } from '../api/client';
-import { describeApiError } from '../api/problems';
 import { REJECTION_REASONS, type Page, type RefundRequestView, type RejectionReason } from '../api/types';
 import { RefundStatusBadge } from '../components/RefundStatusBadge';
+import { ConfirmDialog, EmptyState, Loading, ProblemMessage } from '../components/ui';
 import { formatAmount, formatDateTime, humanize } from '../format';
 
 const QUEUE_URL = '/api/v1/refunds?status=PENDING_APPROVAL&status=ESCALATION_REQUIRED&size=50';
@@ -15,12 +15,14 @@ type Decision =
 
 /**
  * Supervisor approval queue. Buttons follow the server's allowedActions for the current user (role,
- * separation of duties, limits); the server re-checks every decision. ADMIN sees the queue read-only.
+ * separation of duties, limits); the server re-checks every decision. ADMIN sees the queue read-only. Decisions are
+ * final, so each one is confirmed in a dialog first; a refused or outdated decision reloads the queue.
  */
 export function RefundApprovalsPage() {
   const queryClient = useQueryClient();
   const [reasons, setReasons] = useState<Record<string, RejectionReason>>({});
   const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState<Decision | null>(null);
 
   const queue = useQuery({ queryKey: ['refund-queue'], queryFn: () => apiFetch<Page<RefundRequestView>>(QUEUE_URL) });
 
@@ -36,10 +38,12 @@ export function RefundApprovalsPage() {
         ),
       }),
     onSuccess: (result) => {
+      setPending(null);
       setMessage(`${result.refundRef} ${humanize(result.status).toLowerCase()}.`);
       void queryClient.invalidateQueries({ queryKey: ['refund-queue'] });
     },
     onError: () => {
+      setPending(null);
       setMessage(null);
       void queryClient.invalidateQueries({ queryKey: ['refund-queue'] });
     },
@@ -54,23 +58,21 @@ export function RefundApprovalsPage() {
         Requests awaiting a decision. You cannot decide on your own requests, and requests above the supervisor
         approval limit need escalation. Approving records a simulated refund: no money moves.
       </p>
-      {queue.isPending && <p>Loading queue…</p>}
-      {queue.error && (
-        <p className="error" role="alert">
-          Could not load the approval queue: {describeApiError(queue.error)}
-        </p>
-      )}
+      {queue.isPending && <Loading label="Loading the approval queue" />}
+      {queue.error && <ProblemMessage error={queue.error} prefix="Could not load the approval queue" />}
       {message && (
         <p className="success" role="status">
           {message}
         </p>
       )}
       {decide.isError && (
-        <p className="error" role="alert">
-          Decision not recorded: {describeApiError(decide.error)}
-        </p>
+        <ProblemMessage
+          error={decide.error}
+          prefix="Decision not recorded"
+          onReload={() => void queryClient.invalidateQueries({ queryKey: ['refund-queue'] })}
+        />
       )}
-      {queue.data && rows.length === 0 && <p className="muted">No refund requests are waiting.</p>}
+      {queue.data && rows.length === 0 && <EmptyState>No refund requests are waiting.</EmptyState>}
       {rows.length > 0 && (
         <div className="card table-wrap">
           <table aria-label="Refund approval queue">
@@ -117,7 +119,7 @@ export function RefundApprovalsPage() {
                         <button
                           type="button"
                           disabled={decide.isPending}
-                          onClick={() => decide.mutate({ kind: 'approve', request: r })}
+                          onClick={() => setPending({ kind: 'approve', request: r })}
                           aria-label={`Approve ${r.refundRef}`}
                         >
                           Approve
@@ -140,7 +142,7 @@ export function RefundApprovalsPage() {
                             type="button"
                             className="secondary"
                             disabled={decide.isPending}
-                            onClick={() => decide.mutate({ kind: 'reject', request: r, reason })}
+                            onClick={() => setPending({ kind: 'reject', request: r, reason })}
                             aria-label={`Reject ${r.refundRef}`}
                           >
                             Reject
@@ -154,6 +156,27 @@ export function RefundApprovalsPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {pending && (
+        <ConfirmDialog
+          title={pending.kind === 'approve' ? `Approve ${pending.request.refundRef}?` : `Reject ${pending.request.refundRef}?`}
+          confirmLabel={pending.kind === 'approve' ? 'Approve refund' : 'Reject refund'}
+          danger={pending.kind === 'reject'}
+          busy={decide.isPending}
+          onConfirm={() => decide.mutate(pending)}
+          onCancel={() => setPending(null)}
+        >
+          <p>
+            {formatAmount(pending.request.amount, pending.request.currency)} on payment {pending.request.paymentRef},
+            requested by {pending.request.requestedBy}.
+            {pending.kind === 'reject' && <> Reason: {humanize(pending.reason)}.</>}
+          </p>
+          <p className="small">
+            {pending.kind === 'approve'
+              ? 'Approving records a simulated refund in the payment ledger. The decision is final and cannot be undone.'
+              : 'The reservation is released. The decision is final and cannot be undone.'}
+          </p>
+        </ConfirmDialog>
       )}
     </section>
   );

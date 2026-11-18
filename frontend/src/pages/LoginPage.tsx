@@ -2,7 +2,7 @@ import { login } from '../auth/auth';
 
 export function LoginPage({ error }: { error?: string | null }) {
   return (
-    <div className="login">
+    <main className="login">
       <section className="card login-card">
         <h1>
           PayAssist <span>AI</span>
@@ -18,6 +18,6 @@ export function LoginPage({ error }: { error?: string | null }) {
         </button>
         <small>Authentication is handled by Keycloak. PayAssist never sees your password.</small>
       </section>
-    </div>
+    </main>
   );
 }

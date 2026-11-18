@@ -3,7 +3,6 @@ import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { ApiError, apiFetch } from '../api/client';
 import { useIdempotencyKey } from '../api/idempotency';
-import { describeApiError } from '../api/problems';
 import {
   EVIDENCE_TYPES,
   RETURN_REASONS,
@@ -12,6 +11,7 @@ import {
   type EvidenceType,
 } from '../api/types';
 import { DisputeStatusBadge, OverdueBadge } from '../components/DisputeStatusBadge';
+import { ConfirmDialog, EmptyState, Loading, ProblemMessage } from '../components/ui';
 import { formatAmount, formatDateTime, humanize } from '../format';
 
 type Transition =
@@ -19,6 +19,17 @@ type Transition =
   | { path: 'return-for-investigation'; reason: string }
   | { path: 'record-outcome'; outcome: 'WON' | 'LOST' }
   | { path: 'withdraw'; reason: string };
+
+const FINAL_STATUSES = ['WON', 'LOST', 'WITHDRAWN'];
+
+/** Decisions that close the case or send evidence out; each is confirmed first. */
+interface PendingDecision {
+  transition: Transition;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  danger?: boolean;
+}
 
 function post<T>(url: string, body: unknown, idempotencyKey?: string) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -42,6 +53,7 @@ export function DisputeCasePage() {
   });
 
   const [message, setMessage] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<PendingDecision | null>(null);
   const [returnReason, setReturnReason] = useState<string>(RETURN_REASONS[0]);
   const [withdrawReason, setWithdrawReason] = useState<string>(WITHDRAWAL_REASONS[0]);
   const [outcome, setOutcome] = useState<'WON' | 'LOST'>('WON');
@@ -68,8 +80,14 @@ export function DisputeCasePage() {
         expectedVersion: d?.version,
       });
     },
-    onSuccess: (updated) => onSuccess(updated, `Case is now ${humanize(updated.status).toLowerCase()}.`),
-    onError: () => void queryClient.invalidateQueries({ queryKey: key }),
+    onSuccess: (updated) => {
+      setConfirming(null);
+      onSuccess(updated, `Case is now ${humanize(updated.status).toLowerCase()}.`);
+    },
+    onError: () => {
+      setConfirming(null);
+      void queryClient.invalidateQueries({ queryKey: key });
+    },
   });
 
   const addNote = useMutation({
@@ -109,14 +127,18 @@ export function DisputeCasePage() {
     addEvidence.mutate({ body, idempotencyKey: evidenceKey.keyFor(JSON.stringify(body)) });
   }
 
-  if (isPending) return <p>Loading dispute case…</p>;
+  if (isPending) return <Loading label="Loading dispute case" />;
   if (error || !d) {
     return (
       <section>
         <Link to="/disputes">&larr; Back to disputes</Link>
-        <p className="error" role="alert">
-          {error instanceof ApiError && error.status === 404 ? 'Dispute case not found.' : describeApiError(error)}
-        </p>
+        {error instanceof ApiError && error.status === 404 ? (
+          <p className="error" role="alert">
+            Dispute case not found.
+          </p>
+        ) : (
+          <ProblemMessage error={error} prefix="Could not load the dispute case" />
+        )}
       </section>
     );
   }
@@ -124,6 +146,8 @@ export function DisputeCasePage() {
   const can = (a: DisputeView['allowedActions'][number]) => d.allowedActions.includes(a);
   const busy = transition.isPending;
   const failure = transition.error ?? addNote.error ?? addEvidence.error;
+  const isFinal = FINAL_STATUSES.includes(d.status);
+  const closing = [...d.history].reverse().find((h) => h.toStatus === d.status);
 
   return (
     <section>
@@ -141,8 +165,17 @@ export function DisputeCasePage() {
         </p>
       )}
       {failure && (
-        <p className="error" role="alert">
-          Not saved: {describeApiError(failure, 'You do not have permission to do this.')}
+        <ProblemMessage
+          error={failure}
+          prefix="Not saved"
+          onReload={() => void queryClient.invalidateQueries({ queryKey: key })}
+        />
+      )}
+      {isFinal && (
+        <p className="final-banner" role="note">
+          <strong>This case is closed ({humanize(d.status)}) and final.</strong>{' '}
+          {closing && <>Recorded by {closing.actor} on {formatDateTime(closing.occurredAt)}. </>}
+          The case and its payment outcome can no longer be changed; history, notes and evidence stay readable.
         </p>
       )}
 
@@ -195,7 +228,9 @@ export function DisputeCasePage() {
 
         <div className="card">
           <h2>Actions</h2>
-          {d.allowedActions.length === 0 && <p className="muted">No actions are available to you on this case.</p>}
+          {d.allowedActions.length === 0 && (
+            <EmptyState>{isFinal ? 'No actions: the case is closed.' : 'No actions are available to you on this case.'}</EmptyState>
+          )}
           <div className="actions">
             {can('START_INVESTIGATION') && (
               <button type="button" disabled={busy} onClick={() => transition.mutate({ path: 'start-investigation' })}>
@@ -208,7 +243,14 @@ export function DisputeCasePage() {
               </button>
             )}
             {can('APPROVE_SUBMISSION') && (
-              <button type="button" disabled={busy} onClick={() => transition.mutate({ path: 'approve-submission' })}>
+              <button type="button" disabled={busy} onClick={() =>
+                  setConfirming({
+                    transition: { path: 'approve-submission' },
+                    title: `Approve the evidence submission for ${d.caseRef}?`,
+                    body: 'The evidence package is approved for submission to the bank or network. You cannot approve a review you requested yourself.',
+                    confirmLabel: 'Approve submission',
+                  })
+                }>
                 Approve evidence submission
               </button>
             )}
@@ -241,7 +283,18 @@ export function DisputeCasePage() {
                   <option value="WON">Won (payment restored)</option>
                   <option value="LOST">Lost (payment charged back)</option>
                 </select>
-                <button type="button" disabled={busy} onClick={() => transition.mutate({ path: 'record-outcome', outcome })}>
+                <button type="button" disabled={busy} onClick={() =>
+                    setConfirming({
+                      transition: { path: 'record-outcome', outcome },
+                      title: `Record outcome ${outcome === 'WON' ? 'Won' : 'Lost'} for ${d.caseRef}?`,
+                      body:
+                        outcome === 'WON'
+                          ? 'The payment is restored to its previous status. The case closes and the decision is final.'
+                          : 'The payment is recorded as charged back. The case closes and the decision is final.',
+                      confirmLabel: 'Record outcome',
+                      danger: outcome === 'LOST',
+                    })
+                  }>
                   Record outcome
                 </button>
               </span>
@@ -251,7 +304,15 @@ export function DisputeCasePage() {
                 type="button"
                 className="secondary"
                 disabled={busy}
-                onClick={() => transition.mutate({ path: 'accept-liability' })}
+                onClick={() =>
+                  setConfirming({
+                    transition: { path: 'accept-liability' },
+                    title: `Accept liability for ${d.caseRef}?`,
+                    body: 'The case is lost and the payment is recorded as charged back. The decision is final.',
+                    confirmLabel: 'Accept liability',
+                    danger: true,
+                  })
+                }
               >
                 Accept liability (case lost, payment charged back)
               </button>
@@ -273,7 +334,14 @@ export function DisputeCasePage() {
                   type="button"
                   className="secondary"
                   disabled={busy}
-                  onClick={() => transition.mutate({ path: 'withdraw', reason: withdrawReason })}
+                  onClick={() =>
+                    setConfirming({
+                      transition: { path: 'withdraw', reason: withdrawReason },
+                      title: `Record the withdrawal of ${d.caseRef}?`,
+                      body: `Reason: ${humanize(withdrawReason)}. The payment is restored and the case closes. The decision is final.`,
+                      confirmLabel: 'Record withdrawal',
+                    })
+                  }
                 >
                   Record withdrawal
                 </button>
@@ -361,6 +429,19 @@ export function DisputeCasePage() {
           )}
         </section>
       </div>
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.title}
+          confirmLabel={confirming.confirmLabel}
+          danger={confirming.danger}
+          busy={busy}
+          onConfirm={() => transition.mutate(confirming.transition)}
+          onCancel={() => setConfirming(null)}
+        >
+          <p>{confirming.body}</p>
+        </ConfirmDialog>
+      )}
 
       <section className="card section-gap" aria-labelledby="history-heading">
         <h2 id="history-heading">Case history</h2>

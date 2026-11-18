@@ -1,5 +1,7 @@
 package com.payassist.audit.web;
 
+import com.payassist.audit.internal.AuditCheckpointStatus;
+import com.payassist.audit.internal.AuditCheckpointStatusService;
 import com.payassist.audit.internal.AuditEvent;
 import com.payassist.audit.internal.AuditIntegrityReport;
 import com.payassist.audit.internal.AuditQueryService;
@@ -31,9 +33,11 @@ class AuditController {
     private static final String CODE = "^[A-Z][A-Z_]{0,63}$";
 
     private final AuditQueryService audit;
+    private final AuditCheckpointStatusService checkpoints;
 
-    AuditController(AuditQueryService audit) {
+    AuditController(AuditQueryService audit, AuditCheckpointStatusService checkpoints) {
         this.audit = audit;
+        this.checkpoints = checkpoints;
     }
 
     @GetMapping
@@ -60,6 +64,16 @@ class AuditController {
     @PreAuthorize(Roles.ADMIN_ONLY)
     AuditIntegrityReport integrity() {
         return audit.verifyIntegrity();
+    }
+
+    /**
+     * Reported audit-integrity status (ADR 0013 section 12): the in-app chain verification and the runs reported by
+     * the external checkpoint job, with warnings. Cheap (no chain recomputation); audited.
+     */
+    @GetMapping("/checkpoint-status")
+    @PreAuthorize(Roles.ADMIN_ONLY)
+    AuditCheckpointStatus checkpointStatus() {
+        return checkpoints.status();
     }
 
     private static AuditEventResponse toResponse(AuditEvent e) {

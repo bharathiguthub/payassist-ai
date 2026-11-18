@@ -1,4 +1,6 @@
+import { Loading } from '../components/ui';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { ApiError, apiFetch } from '../api/client';
 import type { PaymentDetails } from '../api/types';
@@ -17,6 +19,8 @@ export function PaymentDetailPage() {
   const { data: user } = useCurrentUser();
   const canRequestRefunds = hasAnyRole(user, ['CARE_AGENT', 'CARE_SUPERVISOR']);
   const canOpenDisputes = canRequestRefunds;
+  // Once a case is opened here the payment becomes DISPUTED; keep the form (and its confirmation link) on screen.
+  const [openedDisputeHere, setOpenedDisputeHere] = useState(false);
   const { data, isPending, error } = useQuery({
     queryKey: ['payment', paymentRef],
     queryFn: () => apiFetch<PaymentDetails>(`/api/v1/payments/${encodeURIComponent(paymentRef)}`),
@@ -27,7 +31,7 @@ export function PaymentDetailPage() {
     <section>
       <Link to="/payments">&larr; Back to search</Link>
       <h1>Payment {paymentRef}</h1>
-      {isPending && <p>Loading…</p>}
+      {isPending && <Loading label="Loading payment" />}
       {error && (
         <p className="error" role="alert">
           {error instanceof ApiError && error.status === 404 ? 'Payment not found.' : `Error: ${error.message}`}
@@ -83,9 +87,10 @@ export function PaymentDetailPage() {
           <RefundEligibilityPanel paymentRef={data.paymentRef} currency={data.currency} />
           {canRequestRefunds && <RefundRequestForm paymentRef={data.paymentRef} currency={data.currency} />}
           <PaymentRefundRequests paymentRef={data.paymentRef} />
-          {canOpenDisputes && (data.status === 'SETTLED' || data.status === 'PARTIALLY_REFUNDED') && (
-            <OpenDisputeForm paymentRef={data.paymentRef} />
-          )}
+          {canOpenDisputes &&
+            (openedDisputeHere || data.status === 'SETTLED' || data.status === 'PARTIALLY_REFUNDED') && (
+              <OpenDisputeForm paymentRef={data.paymentRef} onOpened={() => setOpenedDisputeHere(true)} />
+            )}
           <PaymentTimeline paymentRef={data.paymentRef} />
         </div>
       )}

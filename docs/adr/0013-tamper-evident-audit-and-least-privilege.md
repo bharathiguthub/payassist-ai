@@ -108,6 +108,24 @@ session could stage data or shadow objects.
   (`DeploymentSecretsContractTest`); the host account holding `.env` is trusted. Production: WORM storage and a KMS.
   Operations, recovery and limitations: [runbook](../runbooks/audit-checkpoints.md).
 
+### 11. Database refusals as stable problem codes (milestone 7)
+Normal flows never reach the database's own protections, so when one fires it is a bug or an attack. The API maps
+SQLSTATE `P0001` (guard and append-only triggers) to **409 `RECORD_PROTECTED`** and `42501` (missing privilege) to
+**500 `DATABASE_PERMISSION_DENIED`**. Both carry the `correlationId` but never the database message (it names tables,
+triggers and values); the server log keeps the SQL state. Each refusal is audited as `DATA_PROTECTION_REFUSED`
+(outcome DENIED) in a new transaction. Any other data-access failure is a generic 500 without details.
+`DataProtectionRefusalIT` provokes both cases as the owner and restores the database.
+
+### 12. Reported checkpoint status for administrators (milestone 7)
+The backend cannot read the checkpoint ledger (section 10), so the checkpoint job reports each run in
+`audit_checkpoint_runs` (V10: append-only; `payassist_auditor` may INSERT, `payassist_app` may only SELECT, so the
+backend cannot fake a status). `GET /admin/audit-events/checkpoint-status` (ADMIN, audited
+`AUDIT_CHECKPOINT_STATUS_VIEW`) combines it with the latest in-app chain verification and returns warnings
+(`DB_CHAIN_BROKEN`, `LAST_RUN_FAILED`, `DB_CHAIN_NOT_VERIFIED`, `NO_CHECKPOINT`, `CHECKPOINT_STALE`,
+`NOT_VERIFIED_RECENTLY`; threshold `payassist.audit.checkpoint-stale-after`, default 24 h). The UI keeps the two
+guarantees apart: **database audit chain** (verified in the app on demand) and **external checkpoints** (status
+*reported* by the job; proof only by running the job). No key, MAC, ledger path or full hash is stored or shown.
+
 ## Consequences
 - Detects any edit/deletion inside the chain or of historical rows made with owner rights; does not prevent it.
 - Audit writes are serialized; very long transactions that audit early delay other audited transactions.

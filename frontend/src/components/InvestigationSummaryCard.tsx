@@ -1,3 +1,4 @@
+import { EmptyState, Loading } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { ApiError, apiFetch } from '../api/client';
@@ -16,7 +17,7 @@ export function InvestigationSummaryCard({ paymentRef }: { paymentRef: string })
   return (
     <section className="card" aria-labelledby="summary-heading">
       <h2 id="summary-heading">Investigation summary</h2>
-      {isPending && <p>Loading summary…</p>}
+      {isPending && <Loading label="Loading summary" />}
       {error && (
         <p className="error" role="alert">
           {error instanceof ApiError && error.status === 403
@@ -28,7 +29,7 @@ export function InvestigationSummaryCard({ paymentRef }: { paymentRef: string })
         <>
           <p>{data.payment.statusDescription}</p>
           {data.findings.length === 0 ? (
-            <p className="muted">No findings: the recorded history shows nothing that needs attention.</p>
+            <EmptyState>No findings: the recorded history shows nothing that needs attention.</EmptyState>
           ) : (
             <ul className="findings" aria-label="Findings">
               {data.findings.map((f) => (

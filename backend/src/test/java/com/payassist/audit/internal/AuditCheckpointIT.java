@@ -74,6 +74,11 @@ class AuditCheckpointIT {
         assertThat(verify.ok()).isTrue();
         assertThat(verify.appended()).isFalse();
         assertThat(Files.readAllLines(ledger, UTF_8)).hasSize(2);
+
+        // Every run is reported in audit_checkpoint_runs (V10) for the admin status panel, without key or MAC.
+        assertThat(owner.queryForList("select mode || '/' || result || '/' || appended || '/' || latest_checkpoint_head "
+                + "from audit_checkpoint_runs order by id", String.class))
+                .containsExactly("CREATE/OK/true/6", "CREATE/OK/true/9", "VERIFY/OK/false/9");
     }
 
     @Test
@@ -137,6 +142,8 @@ class AuditCheckpointIT {
         var report = run(true);
         assertThat(report.reason()).isEqualTo("DB_CHAIN_ROW_HASH_MISMATCH");
         assertThat(report.checkpoints()).isEqualTo(1);
+        assertThat(owner.queryForObject("select result || '/' || reason from audit_checkpoint_runs order by id desc limit 1",
+                String.class)).isEqualTo("FAILED/DB_CHAIN_ROW_HASH_MISMATCH");
     }
 
     @Test
@@ -155,6 +162,7 @@ class AuditCheckpointIT {
                 "insert into audit_events (occurred_at, actor, action, resource_type, resource_id) "
                         + "values (now(), 'x', 'VIEW', 'PAYMENT', 'PAY-000001')",
                 "update audit_events set actor = 'x'", "delete from audit_events", "truncate audit_events",
+                "update audit_checkpoint_runs set result = 'OK'", "delete from audit_checkpoint_runs",
                 "select * from payments", "select * from customers", "create temp table t (id int)",
                 "create table t (id int)", "alter table audit_events disable trigger all")) {
             assertThatThrownBy(() -> jdbc.execute(sql)).as(sql)

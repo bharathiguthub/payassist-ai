@@ -88,7 +88,38 @@ public final class AuditCheckpointTool {
         System.exit(report.ok() ? 0 : 2);
     }
 
+    /**
+     * Runs the checks (and appends a checkpoint in create mode), then records the run in {@code audit_checkpoint_runs}
+     * (V10) so the admin UI can show a reported status. Recording is best effort: a failure is printed, and the UI then
+     * shows the status as stale.
+     */
     static Report run(boolean create, DataSource dataSource, Path file, byte[] key, Clock clock) {
+        Report report = runChecks(create, dataSource, file, key, clock);
+        if (!recordRun(create, report, dataSource, file, key)) {
+            System.err.println("Audit checkpoint: WARNING the run could not be recorded in audit_checkpoint_runs");
+        }
+        return report;
+    }
+
+    static boolean recordRun(boolean create, Report report, DataSource dataSource, Path file, byte[] key) {
+        var ledger = AuditCheckpointLedger.read(file, key);
+        var latest = ledger.ok() ? ledger.last() : null;
+        try {
+            new JdbcTemplate(dataSource).update("""
+                    insert into audit_checkpoint_runs (mode, result, reason, checkpoints, appended,
+                        latest_checkpoint_head, latest_checkpoint_at, db_head_chain_seq, db_head_hash_prefix)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    create ? "CREATE" : "VERIFY", report.ok() ? "OK" : "FAILED", report.reason(), report.checkpoints(),
+                    report.appended(), latest == null ? null : latest.headChainSeq(),
+                    latest == null ? null : java.sql.Timestamp.from(latest.createdAt()), report.headChainSeq(),
+                    report.headRowHash() == null ? null : report.headRowHash().substring(0, 16));
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static Report runChecks(boolean create, DataSource dataSource, Path file, byte[] key, Clock clock) {
         if (!create) {
             return check(false, dataSource, file, key, clock);
         }

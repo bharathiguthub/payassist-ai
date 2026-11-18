@@ -5,6 +5,8 @@ import { PaymentDetailPage } from './PaymentDetailPage';
 import { renderWithProviders } from '../test/render';
 import { loggedInAs, server } from '../test/server';
 import { sampleDetails, sampleSummary, sampleTimeline } from '../test/investigation-fixtures';
+import { disputeView } from '../test/dispute-fixtures';
+import userEvent from '@testing-library/user-event';
 
 function renderDetail(ref = 'PAY-000001') {
   return renderWithProviders(
@@ -24,6 +26,28 @@ function stubInvestigationApis() {
 }
 
 describe('PaymentDetailPage investigation', () => {
+  it('keeps the dispute confirmation visible after the payment becomes DISPUTED', async () => {
+    let opened = false;
+    server.use(
+      http.get('/api/v1/payments/PAY-000001', () =>
+        HttpResponse.json({ ...sampleDetails, status: opened ? 'DISPUTED' : sampleDetails.status }),
+      ),
+      http.get('/api/v1/payments/PAY-000001/timeline', () => HttpResponse.json(sampleTimeline)),
+      http.get('/api/v1/payments/PAY-000001/investigation-summary', () => HttpResponse.json(sampleSummary)),
+      http.post('/api/v1/disputes', () => {
+        opened = true;
+        return HttpResponse.json(disputeView({ caseRef: 'DSP-00000000000A' }), { status: 201 });
+      }),
+    );
+    loggedInAs(['CARE_AGENT']);
+    renderDetail();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open dispute case' }));
+    expect(await screen.findByRole('link', { name: 'DSP-00000000000A' })).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByText('Disputed')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: 'DSP-00000000000A' })).toBeInTheDocument();
+  });
+
   it('shows the timeline in the order returned, with amounts, reasons and correlation IDs', async () => {
     stubInvestigationApis();
     renderDetail();
@@ -102,8 +126,8 @@ describe('PaymentDetailPage investigation', () => {
   it('shows loading states while data is fetched', async () => {
     stubInvestigationApis();
     renderDetail();
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
-    expect(await screen.findByText('Loading timeline…')).toBeInTheDocument();
+    expect(screen.getByText(/Loading payment/)).toBeInTheDocument();
+    expect(await screen.findByText(/Loading timeline/)).toBeInTheDocument();
   });
 
   it('offers the refund request form to agents but not to read-only admins', async () => {

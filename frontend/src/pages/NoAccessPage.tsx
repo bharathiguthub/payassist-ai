@@ -3,7 +3,7 @@ import { logout } from '../auth/auth';
 
 export function NoAccessPage({ user }: { user: CurrentUser }) {
   return (
-    <div className="login">
+    <main className="login">
       <section className="card login-card" role="alert">
         <h1>No access</h1>
         <p>
@@ -14,6 +14,6 @@ export function NoAccessPage({ user }: { user: CurrentUser }) {
           Sign out
         </button>
       </section>
-    </div>
+    </main>
   );
 }

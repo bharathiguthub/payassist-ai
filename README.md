@@ -159,6 +159,8 @@ npx vitest run src/App.test.tsx            # single file
 npx vitest run -t "blocks a care agent"    # by test name
 npm run lint
 npm run build                              # type-check + production build
+npx playwright install chromium             # once: browser for the end-to-end suite
+npm run e2e                                # Playwright browser tests against the running stack (writes synthetic data)
 
 # End-to-end against the running stack (real Keycloak login)
 cd C:\Projects\payassist-ai

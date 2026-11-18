@@ -1,11 +1,29 @@
-import { NavLink, Outlet } from 'react-router';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import type { CurrentUser } from '../api/types';
 import { hasAnyRole, logout } from '../auth/auth';
 import { humanize } from '../format';
 
+/**
+ * App shell. Navigation links are shown per role for convenience only: every page and API call is authorised again
+ * by the backend. After each navigation the page heading receives focus so screen readers announce the new page.
+ */
 export function Layout({ user }: { user: CurrentUser }) {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const heading = document.querySelector<HTMLElement>('main h1');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }, [pathname]);
+
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
       <header className="topbar">
         <div className="brand">
           PayAssist <span>AI</span>
@@ -30,7 +48,7 @@ export function Layout({ user }: { user: CurrentUser }) {
           </button>
         </div>
       </header>
-      <main>
+      <main id="main" tabIndex={-1}>
         <Outlet />
       </main>
       <footer className="footer">Synthetic data only &middot; no real money moves</footer>
